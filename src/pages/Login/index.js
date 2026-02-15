@@ -30,6 +30,10 @@ const useStyles = makeStyles((theme) => {
       "0%, 100%": { boxShadow: "0 0 0 0 rgba(13, 148, 136, 0.4)" },
       "50%": { boxShadow: "0 0 0 12px rgba(13, 148, 136, 0)" },
     },
+    "@keyframes fadeIn": {
+      "0%": { opacity: 0 },
+      "100%": { opacity: 1 },
+    },
     root: {
       display: "flex",
       justifyContent: "center",
@@ -272,6 +276,53 @@ const useStyles = makeStyles((theme) => {
       position: "relative",
       width: "100%",
     },
+    footer: {
+      position: "fixed",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      zIndex: 10,
+      padding: "14px 24px",
+      textAlign: "center",
+      pointerEvents: "none",
+      userSelect: "none",
+      animation: "$fadeIn 0.8s ease 0.4s forwards",
+      opacity: 0,
+      [theme.breakpoints.down("xs")]: {
+        padding: "12px 16px",
+      },
+    },
+    footerInner: {
+      maxWidth: 420,
+      margin: "0 auto",
+      padding: "12px 16px",
+      borderRadius: "12px",
+      background: "rgba(255, 255, 255, 0.55)",
+      backdropFilter: "blur(10px)",
+      boxShadow: "0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(255, 255, 255, 0.5) inset",
+      border: "1px solid rgba(255, 255, 255, 0.7)",
+      pointerEvents: "none",
+      userSelect: "none",
+    },
+    footerText: {
+      fontSize: "0.8125rem",
+      color: "#64748b",
+      fontWeight: 500,
+      letterSpacing: "0.02em",
+      userSelect: "none",
+      [theme.breakpoints.down("xs")]: {
+        fontSize: "0.75rem",
+      },
+    },
+    footerBrand: {
+      fontSize: "0.6875rem",
+      color: "#94a3b8",
+      marginTop: 4,
+      fontWeight: 500,
+      letterSpacing: "0.04em",
+      textTransform: "uppercase",
+      userSelect: "none",
+    },
   };
 });
 
@@ -458,6 +509,17 @@ const Login = () => {
             )}
           </div>
         </form>
+
+        <footer className={classes.footer} role="contentinfo" aria-label="Rodapé">
+          <div className={classes.footerInner}>
+            <Typography component="p" className={classes.footerText}>
+              © {new Date().getFullYear()} · Acesso seguro e rápido
+            </Typography>
+            <Typography component="p" className={classes.footerBrand}>
+              Multizap
+            </Typography>
+          </div>
+        </footer>
       </div>
     </>
   );
