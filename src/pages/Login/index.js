@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { Button, TextField, Typography } from "@material-ui/core";
-import { makeStyles } from "@material-ui/core/styles";
+import { makeStyles, useTheme } from "@material-ui/core/styles";
 import { IconButton, InputAdornment, Switch } from "@mui/material";
 import Visibility from "@material-ui/icons/Visibility";
 import VisibilityOff from "@material-ui/icons/VisibilityOff";
@@ -159,59 +159,13 @@ const useStyles = makeStyles((theme) => ({
       fontSize: "0.875rem",
     },
   },
-  whatsappButton: {
-    position: "fixed",
-    bottom: "16px",
-    right: "16px",
-    backgroundColor: "#10aa62",
-    borderRadius: "50%",
-    width: "48px",
-    height: "48px",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    boxShadow: "0 4px 12px #044012",
-    transition: "all 0.3s ease",
-    animation: "$bounce 1s infinite",
-    cursor: "pointer",
-    zIndex: 999,
-    "&:hover": {
-      backgroundColor: "#10aa62",
-      transform: "scale(1.1)",
-      boxShadow: "0 8px 16px #05491c",
-    },
-    [theme.breakpoints.down("xs")]: {
-      width: "44px",
-      height: "44px",
-      bottom: "12px",
-      right: "12px",
-    },
-  },
-  whatsappIcon: {
-    width: "48px",
-    height: "48px",
-    objectFit: "contain",
-    [theme.breakpoints.down("xs")]: {
-      width: "40px",
-      height: "40px",
-    },
-  },
-  "@keyframes bounce": {
-    "0%": {
-      transform: "translateY(0)",
-    },
-    "50%": {
-      transform: "translateY(-10px)",
-    },
-    "100%": {
-      transform: "translateY(0)",
-    },
-  },
 }));
 
 const Login = () => {
   const classes = useStyles();
+  const theme = useTheme();
   const { handleLogin } = useContext(AuthContext);
+  const logoUrl = theme.calculatedLogoLight?.() ?? theme.appLogoLight ?? "/logo.png";
   const [user, setUser] = useState({ email: "", password: "", remember: false });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -262,7 +216,7 @@ const Login = () => {
 
       <div className={classes.root}>
         <form className={classes.formContainer} onSubmit={handleSubmit}>
-          <img src="/logo.png" alt="Logo" className={classes.logoImg} />
+          <img src={logoUrl} alt="Logo" className={classes.logoImg} />
           <Typography className={classes.title}>Acesso ao sistema</Typography>
           <Typography className={classes.subtitle}>
             Entre com suas credenciais para continuar
@@ -364,16 +318,6 @@ const Login = () => {
               </RouterLink>
             </div>
         </form>
-        <div
-          className={classes.whatsappButton}
-          onClick={() => window.open("https://wa.me/5541992098329")}
-        >
-          <img
-            src="https://i.ibb.co/1p43y88/iconzapzap.png"
-            alt="WhatsApp"
-            className={classes.whatsappIcon}
-          />
-        </div>
       </div>
     </>
   );
