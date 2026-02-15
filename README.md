@@ -49,32 +49,13 @@ Gera a pasta `build/` com os arquivos estáticos.
 
 ---
 
-## Como rodar no PM2
+## Aplicar no servidor (PM2)
 
-Depois do build, use o `ecosystem.config.js` desta pasta:
+Depois do build, no servidor:
 
 ```bash
 npm run build
-pm2 start ecosystem.config.js
-```
-
-O PM2 sobe o **primatazap-frontend** usando `serve` na porta **3000**.
-
-### Comandos úteis
-
-```bash
-pm2 status
-pm2 logs primatazap-frontend
-pm2 restart primatazap-frontend
-pm2 stop primatazap-frontend
-```
-
-### Dependência do `serve`
-
-Para servir o `build/` o config usa `npx serve`. Se der erro, instale globalmente:
-
-```bash
-npm install -g serve
+pm2 restart azvdodesigner-frontend
 ```
 
 ---
