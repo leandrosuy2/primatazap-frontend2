@@ -434,7 +434,8 @@ const MessagesList = ({
   onDrop,
   whatsappId,
   queueId,
-  channel
+  channel,
+  ticketIdProp,
 }) => {
   const classes = useStyles();
   const [messagesList, dispatch] = useReducer(reducer, []);
@@ -449,7 +450,8 @@ const MessagesList = ({
   const { setReplyingMessage } = useContext(ReplyMessageContext);
   const [anchorEl, setAnchorEl] = useState(null);
   const messageOptionsMenuOpen = Boolean(anchorEl);
-  const { ticketId } = useParams();
+  const { ticketId: ticketIdFromParams } = useParams();
+  const ticketId = ticketIdProp !== undefined && ticketIdProp !== null ? ticketIdProp : ticketIdFromParams;
 
   const currentTicketId = useRef(ticketId);
   const { getAll } = useCompanySettings();
@@ -497,7 +499,7 @@ const MessagesList = ({
     setLoading(true);
     const delayDebounceFn = setTimeout(() => {
       const fetchMessages = async () => {
-        if (ticketId === "undefined") {
+        if (ticketId === "undefined" && !ticketIdProp) {
           history.push("/tickets");
           return;
         }

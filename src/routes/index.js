@@ -49,6 +49,7 @@ import Kanban from "../pages/Kanban";
 import TagsKanban from "../pages/TagsKanban";
 import ForgotPassword from "../pages/ForgetPassWord";
 import ResetPassword from "../pages/ResetPassword";
+import Tutoriais from "../pages/Tutoriais";
 
 
 const Routes = () => {
@@ -85,6 +86,8 @@ const Routes = () => {
                 <Route exact path="/contacts" component={Contacts} isPrivate />
                 <Route exact path="/contacts/import" component={ContactImportPage} isPrivate />
                 <Route exact path="/helps" component={Helps} isPrivate />
+                <Route exact path="/tutoriais" component={Tutoriais} isPrivate />
+                <Route exact path="/tutoriais/:slug" component={Tutoriais} isPrivate />
                 <Route exact path="/users" component={Users} isPrivate />
                 <Route exact path="/messages-api" component={MessagesAPI} isPrivate />
                 <Route exact path="/settings" component={SettingsCustom} isPrivate />
@@ -113,7 +116,7 @@ const Routes = () => {
                 <Route exact path="/chats/:id?" component={Chat} isPrivate />
                 <Route exact path="/files" component={Files} isPrivate />
                 <Route exact path="/moments" component={ChatMoments} isPrivate />
-                <Route exact path="/Kanban" component={Kanban} isPrivate />
+                <Route exact path="/kanban" component={Kanban} isPrivate />
                 <Route exact path="/TagsKanban" component={TagsKanban} isPrivate />
                 <Route exact path="/prompts" component={Prompts} isPrivate />
                 <Route exact path="/allConnections" component={AllConnections} isPrivate />
