@@ -7,17 +7,18 @@ import {
   makeStyles,
   Paper,
   Typography,
+  Box,
   Button,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
-  Box,
   Tooltip,
   TextField,
 } from "@material-ui/core";
 import Autocomplete from "@material-ui/lab/Autocomplete";
 import Close from "@material-ui/icons/Close";
+import Refresh from "@material-ui/icons/Refresh";
 import Edit from "@material-ui/icons/Edit";
 import PersonAdd from "@material-ui/icons/PersonAdd";
 import HelpOutline from "@material-ui/icons/HelpOutline";
@@ -53,9 +54,6 @@ const useStyles = makeStyles((theme) => ({
     overflowY: "auto",
     padding: theme.spacing(2),
   },
-  statusSelect: {
-    minWidth: 160,
-  },
   coverWrapper: {
     width: "100%",
     maxHeight: 240,
@@ -78,6 +76,7 @@ const useStyles = makeStyles((theme) => ({
     textAlign: "center",
     fontSize: "0.9rem",
   },
+  statusSelect: { minWidth: 160 },
   actionsRow: {
     display: "flex",
     alignItems: "center",
@@ -138,34 +137,111 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: theme.palette.primary.main,
     color: "#fff",
   },
-  addAttachmentBtn: { marginTop: theme.spacing(1) },
-  inputFile: { display: "none" },
-  changeClientRow: {
-    marginBottom: theme.spacing(2),
-  },
-  changeClientAutocomplete: {
-    minWidth: 280,
-  },
   logsSection: {
     padding: theme.spacing(2),
     marginTop: theme.spacing(2),
   },
-  logItem: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: theme.spacing(1, 0),
-    borderBottom: "1px solid",
+  timeline: {
+    position: "relative",
+    paddingLeft: 28,
+    "&::before": {
+      content: '""',
+      position: "absolute",
+      left: 7,
+      top: 8,
+      bottom: 8,
+      width: 2,
+      background: `linear-gradient(to bottom, ${theme.palette.primary.main}, ${theme.palette.primary.light})`,
+      borderRadius: 1,
+      transformOrigin: "top",
+      animation: "$timelineLineDraw 0.6s ease-out forwards",
+    },
+  },
+  timelineRunner: {
+    position: "absolute",
+    left: 2,
+    width: 12,
+    height: 12,
+    borderRadius: "50%",
+    background: `radial-gradient(circle at 30% 30%, #fff, ${theme.palette.primary.light})`,
+    boxShadow: "0 0 14px rgba(25, 118, 210, 0.9), 0 0 6px rgba(255,255,255,0.8)",
+    transition: "top 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
+    pointerEvents: "none",
+    zIndex: 1,
+  },
+  timelineItem: {
+    position: "relative",
+    marginBottom: theme.spacing(1.5),
+    opacity: 0,
+    animation: "$timelineSlideIn 0.45s ease-out forwards",
+    "&:last-child": { marginBottom: 0 },
+  },
+  timelineDot: {
+    position: "absolute",
+    left: -28,
+    top: 10,
+    width: 16,
+    height: 16,
+    borderRadius: "50%",
+    border: "3px solid",
+    borderColor: theme.palette.background.paper,
+    boxShadow: theme.shadows[2],
+    animation: "$timelineDotPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, $timelineDotPulse 2.5s ease-in-out infinite 0.5s",
+  },
+  timelineCard: {
+    padding: theme.spacing(1.5, 2),
+    borderRadius: 12,
+    backgroundColor: theme.palette.grey[50],
+    border: "1px solid",
     borderColor: theme.palette.divider,
-    "&:last-child": { borderBottom: "none" },
+    borderLeftWidth: 3,
+    transition: "box-shadow 0.25s ease, transform 0.25s ease",
+    "&:hover": {
+      boxShadow: theme.shadows[3],
+      transform: "translateX(6px)",
+    },
   },
-  logText: {
-    fontSize: "0.85rem",
+  timelineTime: {
+    fontSize: "0.75rem",
+    fontWeight: 600,
+    marginBottom: 4,
+    letterSpacing: "0.02em",
   },
-  logUser: {
+  timelineLabel: {
+    fontSize: "0.9rem",
+    color: theme.palette.text.primary,
+    "& span": {
+      color: theme.palette.text.secondary,
+      fontWeight: 500,
+    },
+  },
+  timelineUser: {
     fontSize: "0.75rem",
     color: theme.palette.text.secondary,
+    marginTop: 6,
+    fontStyle: "italic",
   },
+  "@keyframes timelineLineDraw": {
+    "0%": { transform: "scaleY(0)" },
+    "100%": { transform: "scaleY(1)" },
+  },
+  "@keyframes timelineSlideIn": {
+    "0%": { opacity: 0, transform: "translateX(-24px)" },
+    "100%": { opacity: 1, transform: "translateX(0)" },
+  },
+  "@keyframes timelineDotPop": {
+    "0%": { transform: "scale(0)", opacity: 0 },
+    "70%": { transform: "scale(1.25)", opacity: 1 },
+    "100%": { transform: "scale(1)", opacity: 1 },
+  },
+  "@keyframes timelineDotPulse": {
+    "0%, 100%": { opacity: 1, filter: "brightness(1)" },
+    "50%": { opacity: 0.85, filter: "brightness(1.15)" },
+  },
+  addAttachmentBtn: { marginTop: theme.spacing(1) },
+  inputFile: { display: "none" },
+  changeClientRow: { marginBottom: theme.spacing(2) },
+  changeClientAutocomplete: { minWidth: 280 },
 }));
 
 const STATUS_OPTIONS = [
@@ -175,12 +251,24 @@ const STATUS_OPTIONS = [
   { value: "cancelado", label: "Cancelado" },
 ];
 
-export default function QuadroModal({ open, onClose, ticketUuid }) {
+// Cores por status para a timeline: entregue=verde, produção=laranja, cancelado=cinza, aberto/aguardando=azul
+function getStatusColor(label) {
+  if (!label) return "#1976d2";
+  const t = String(label).toLowerCase();
+  if (t.includes("entregue") || t.includes("concluído") || t.includes("concluido")) return "#2e7d32";
+  if (t.includes("produção") || t.includes("producao") || t.includes("criação") || t.includes("criacao")) return "#ed6c02";
+  if (t.includes("cancelado")) return "#757575";
+  if (t.includes("em aberto") || t.includes("aguardando")) return "#1976d2";
+  return "#d32f2f";
+}
+
+export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true }) {
   const classes = useStyles();
-  const { user } = useContext(AuthContext);
+  useContext(AuthContext);
   const editorRef = useRef(null);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
+  const timelineRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [ticket, setTicket] = useState(null);
@@ -190,12 +278,14 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
   const [descriptionBackup, setDescriptionBackup] = useState("");
   const [editMode, setEditMode] = useState(false);
   const [attachments, setAttachments] = useState([]);
+  const [statusLogs, setStatusLogs] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [changeClientOpen, setChangeClientOpen] = useState(false);
   const [contactOptions, setContactOptions] = useState([]);
   const [contactSearch, setContactSearch] = useState("");
   const [selectedNewContact, setSelectedNewContact] = useState(null);
   const [loadingContact, setLoadingContact] = useState(false);
-  const [statusLogs, setStatusLogs] = useState([]);
+  const [runnerTop, setRunnerTop] = useState(null);
 
   const resolveImageUrl = (url) => {
     if (!url || typeof url !== "string") return null;
@@ -208,6 +298,62 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
     return resolved.replace(/:443(?=\/)/, "");
   };
 
+  const loadAll = React.useCallback(async () => {
+    if (!ticketUuid) return;
+    try {
+      const { data: ticketData } = await api.get("/tickets/u/" + ticketUuid);
+      setTicket(ticketData);
+      let quadroStatus = "aguardando";
+      let quadroDescription = "";
+      let quadroAttachments = [];
+      try {
+        const { data: quadroData } = await api.get("/tickets/" + ticketUuid + "/quadro");
+        if (quadroData.quadro) {
+          quadroStatus = quadroData.quadro.status || "aguardando";
+          quadroDescription = quadroData.quadro.description || "";
+        }
+        if (Array.isArray(quadroData.attachments)) {
+          quadroAttachments = quadroData.attachments.map((a) => ({
+            id: a.id,
+            name: a.name,
+            url: a.url,
+            isCapa: !!a.isCapa,
+            createdAt: a.createdAt,
+            date: a.createdAt ? format(parseISO(a.createdAt), "dd/MM/yyyy") : "",
+          }));
+        }
+      } catch (quadroErr) {
+        // Backend pode ainda não ter o endpoint; mantém defaults
+      }
+      setStatus(quadroStatus);
+      setDescription(quadroDescription || "");
+      setAttachments(quadroAttachments);
+      const capaAttachment = quadroAttachments.find((a) => a.isCapa);
+      if (capaAttachment?.url) {
+        setCoverImage(resolveImageUrl(capaAttachment.url));
+      } else {
+        const pic = ticketData.contact?.urlPicture || ticketData.contact?.profilePicUrl || null;
+        setCoverImage(resolveImageUrl(pic));
+      }
+      // Logs de status: só após ter ticket.id
+      const ticketId = ticketData.id;
+      if (ticketId) {
+        try {
+          const { data: logsData } = await api.get(`/tickets/${ticketId}/quadro/logs`);
+          setStatusLogs(logsData.logs || []);
+        } catch (logErr) {
+          setStatusLogs([]);
+        }
+      }
+    } catch (err) {
+      toast.error("Ticket não encontrado.");
+      onClose();
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [ticketUuid, onClose]);
+
   useEffect(() => {
     if (!open || !ticketUuid) {
       setTicket(null);
@@ -215,68 +361,42 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
       setStatus("aguardando");
       setDescription("");
       setAttachments([]);
+      setStatusLogs([]);
       setEditMode(false);
+      setChangeClientOpen(false);
+      setRunnerTop(null);
       return;
     }
     setLoading(true);
-    const loadAll = async () => {
-      try {
-        const { data: ticketData } = await api.get("/tickets/u/" + ticketUuid);
-        setTicket(ticketData);
-        let quadroStatus = "aguardando";
-        let quadroDescription = "";
-        let quadroAttachments = [];
-        try {
-          const { data: quadroData } = await api.get("/tickets/" + ticketUuid + "/quadro");
-          if (quadroData.quadro) {
-            quadroStatus = quadroData.quadro.status || "aguardando";
-            quadroDescription = quadroData.quadro.description || "";
-          }
-          if (Array.isArray(quadroData.attachments)) {
-            quadroAttachments = quadroData.attachments.map((a) => ({
-              id: a.id,
-              name: a.name,
-              url: a.url,
-              isCapa: !!a.isCapa,
-              createdAt: a.createdAt,
-              date: a.createdAt ? format(parseISO(a.createdAt), "dd/MM/yyyy") : "",
-            }));
-          }
-        } catch (quadroErr) {
-          // Backend pode ainda não ter o endpoint; mantém defaults
-        }
-        setStatus(quadroStatus);
-        setDescription(quadroDescription || "");
-        setAttachments(quadroAttachments);
-        const capaAttachment = quadroAttachments.find((a) => a.isCapa);
-        if (capaAttachment?.url) {
-          setCoverImage(resolveImageUrl(capaAttachment.url));
-        } else {
-          const pic = ticketData.contact?.urlPicture || ticketData.contact?.profilePicUrl || null;
-          setCoverImage(resolveImageUrl(pic));
-        }
-      } catch (err) {
-        toast.error("Ticket não encontrado.");
-        onClose();
-      } finally {
-        setLoading(false);
-      }
-    };
     loadAll();
-  }, [open, ticketUuid, onClose]);
+  }, [open, ticketUuid, onClose, loadAll]);
 
+  // Runner: vai de um ponto ao próximo na timeline (mede posições dos dots e anima com transition)
   useEffect(() => {
-    if (!open || !ticket?.id) return;
-    const fetchLogs = async () => {
-      try {
-        const { data } = await api.get(`/tickets/${ticket.id}/quadro/logs`);
-        setStatusLogs(data.logs || []);
-      } catch (err) {
-        setStatusLogs([]);
-      }
-    };
-    fetchLogs();
-  }, [open, ticket?.id]);
+    if (!statusLogs.length || !open) {
+      setRunnerTop(null);
+      return;
+    }
+    const DOT_OFFSET = 10; // top do dot dentro do item
+    const MS_PER_DOT = 650; // tempo entre cada ponto
+    const t = setTimeout(() => {
+      const el = timelineRef.current;
+      if (!el) return;
+      const items = el.querySelectorAll("[data-timeline-item]");
+      if (items.length === 0) return;
+      const positions = Array.from(items).map((item) => item.offsetTop + DOT_OFFSET);
+      setRunnerTop(positions[0]);
+      positions.slice(1).forEach((top, i) => {
+        setTimeout(() => setRunnerTop(top), (i + 1) * MS_PER_DOT);
+      });
+    }, 400); // espera linha desenhar + itens começarem a entrar
+    return () => clearTimeout(t);
+  }, [statusLogs, open]);
+
+  const handleAtualizar = () => {
+    setRefreshing(true);
+    loadAll();
+  };
 
   const handleEditClick = () => {
     setDescriptionBackup(description);
@@ -369,23 +489,23 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
   };
 
   useEffect(() => {
-    if (!changeClientOpen || contactSearch.length < 2) {
+    if (!readOnly && changeClientOpen && contactSearch.length >= 2) {
+      const t = setTimeout(async () => {
+        setLoadingContact(true);
+        try {
+          const { data } = await api.get("contacts", { params: { searchParam: contactSearch } });
+          setContactOptions(data.contacts || []);
+        } catch (err) {
+          setContactOptions([]);
+        } finally {
+          setLoadingContact(false);
+        }
+      }, 400);
+      return () => clearTimeout(t);
+    } else {
       setContactOptions([]);
-      return;
     }
-    const t = setTimeout(async () => {
-      setLoadingContact(true);
-      try {
-        const { data } = await api.get("contacts", { params: { searchParam: contactSearch } });
-        setContactOptions(data.contacts || []);
-      } catch (err) {
-        setContactOptions([]);
-      } finally {
-        setLoadingContact(false);
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [changeClientOpen, contactSearch]);
+  }, [readOnly, changeClientOpen, contactSearch]);
 
   const handleTrocarCliente = async () => {
     if (!selectedNewContact?.id || !ticket?.id) return;
@@ -417,11 +537,13 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
               {contactName}
             </Typography>
           )}
-          <Tooltip title="Trocar cliente vinculado">
-            <IconButton size="small" onClick={() => setChangeClientOpen((v) => !v)}>
-              <PersonAdd fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          {!readOnly && (
+            <Tooltip title="Trocar cliente vinculado">
+              <IconButton size="small" onClick={() => setChangeClientOpen((v) => !v)}>
+                <PersonAdd fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
           {queueName && (
             <Typography variant="caption" color="textSecondary">
               {queueName}
@@ -429,32 +551,49 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
               {assignedUser ? ` · ${assignedUser}` : ""}
             </Typography>
           )}
-          <FormControl variant="outlined" size="small" className={classes.statusSelect}>
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={status}
-              onChange={async (e) => {
-                const v = e.target.value;
-                setStatus(v);
-                if (!ticket?.id) return;
-                try {
-                  await api.put("/tickets/" + ticket.id + "/quadro/status", { status: v });
-                  toast.success("Status atualizado.");
-                } catch (err) {
-                  setStatus(status);
-                  toast.error(err?.response?.data?.message || "Erro ao atualizar status.");
-                }
-              }}
-              label="Status"
-            >
-              {STATUS_OPTIONS.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          {readOnly ? (
+            <Typography variant="body2" color="textSecondary" style={{ marginLeft: 8 }}>
+              Status: <strong>{STATUS_OPTIONS.find((o) => o.value === status)?.label || status}</strong>
+            </Typography>
+          ) : (
+            <FormControl variant="outlined" size="small" className={classes.statusSelect}>
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={status}
+                onChange={async (e) => {
+                  const v = e.target.value;
+                  setStatus(v);
+                  if (!ticket?.id) return;
+                  try {
+                    await api.put("/tickets/" + ticket.id + "/quadro/status", { status: v });
+                    toast.success("Status atualizado.");
+                  } catch (err) {
+                    setStatus(status);
+                    toast.error(err?.response?.data?.message || "Erro ao atualizar status.");
+                  }
+                }}
+                label="Status"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
         </div>
+        {readOnly && (
+          <Button
+            size="small"
+            startIcon={<Refresh />}
+            onClick={handleAtualizar}
+            disabled={loading || refreshing}
+            style={{ marginRight: 8 }}
+          >
+            {refreshing ? "Atualizando…" : "Atualizar"}
+          </Button>
+        )}
         <IconButton onClick={onClose} size="small" aria-label="Fechar">
           <Close />
         </IconButton>
@@ -464,7 +603,7 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
           <Typography color="textSecondary">Carregando...</Typography>
         ) : (
           <>
-            {changeClientOpen && (
+            {!readOnly && changeClientOpen && (
               <Paper variant="outlined" className={classes.changeClientRow} style={{ padding: 16 }}>
                 <Typography variant="subtitle2" style={{ marginBottom: 8 }}>Trocar cliente</Typography>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -485,13 +624,7 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
                       />
                     )}
                   />
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    size="small"
-                    disabled={!selectedNewContact}
-                    onClick={handleTrocarCliente}
-                  >
+                  <Button variant="contained" color="primary" size="small" disabled={!selectedNewContact} onClick={handleTrocarCliente}>
                     Aplicar
                   </Button>
                   <Button size="small" onClick={() => setChangeClientOpen(false)}>Cancelar</Button>
@@ -509,94 +642,51 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
               )}
             </div>
 
-            <div className={classes.actionsRow}>
-              <Tooltip title="Editar descrição">
-                <IconButton size="small" onClick={handleEditClick}>
-                  <Edit />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Ajuda">
-                <IconButton size="small">
-                  <HelpOutline />
-                </IconButton>
-              </Tooltip>
-            </div>
-
             <Paper elevation={0} className={classes.editorCard}>
-              {!editMode ? (
-                <Box
-                  onClick={handleEditClick}
-                  style={{ cursor: "pointer", minHeight: 50, padding: 16 }}
-                  dangerouslySetInnerHTML={{ __html: description }}
-                />
+              {readOnly ? (
+                <>
+                  <Typography variant="subtitle2" color="textSecondary" style={{ marginBottom: 8 }}>Descrição</Typography>
+                  <Box style={{ minHeight: 24, padding: 16 }} dangerouslySetInnerHTML={{ __html: description || "" }} />
+                </>
+              ) : !editMode ? (
+                <>
+                  <div className={classes.actionsRow}>
+                    <Tooltip title="Editar descrição">
+                      <IconButton size="small" onClick={handleEditClick}><Edit /></IconButton>
+                    </Tooltip>
+                    <Tooltip title="Ajuda">
+                      <IconButton size="small"><HelpOutline /></IconButton>
+                    </Tooltip>
+                  </div>
+                  <Box onClick={handleEditClick} style={{ cursor: "pointer", minHeight: 50, padding: 16 }} dangerouslySetInnerHTML={{ __html: description || "" }} />
+                </>
               ) : (
                 <>
                   <div className={classes.toolbar}>
-                    <Tooltip title="Tamanho">
-                      <Select
-                        size="small"
-                        value=""
-                        displayEmpty
-                        style={{ minWidth: 48, height: 32 }}
-                        onMouseDown={(e) => e.preventDefault()}
-                        onChange={(e) => execCmd("fontSize", e.target.value)}
-                      >
-                        <MenuItem value="1">P</MenuItem>
-                        <MenuItem value="3">Tt</MenuItem>
-                        <MenuItem value="5">H</MenuItem>
-                      </Select>
-                    </Tooltip>
-                    <IconButton size="small" onClick={() => execCmd("bold")} title="Negrito">
-                      <Typography style={{ fontWeight: 700 }}>B</Typography>
-                    </IconButton>
-                    <IconButton size="small" onClick={() => execCmd("italic")} title="Itálico">
-                      <Typography style={{ fontStyle: "italic" }}>I</Typography>
-                    </IconButton>
-                    <IconButton size="small" onClick={() => execCmd("insertUnorderedList")} title="Lista">
-                      <FormatListBulleted fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={handleInsertLink} title="Link">
-                      <Link fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => imageInputRef.current?.click()} title="Inserir imagem">
-                      <Image fontSize="small" />
-                    </IconButton>
-                    <input
-                      type="file"
-                      ref={imageInputRef}
-                      accept="image/*"
-                      className={classes.inputFile}
-                      onChange={handleInsertImage}
-                    />
-                    <IconButton size="small" title="Adicionar elemento">
-                      <Add fontSize="small" />
-                    </IconButton>
+                    <Select size="small" value="" displayEmpty style={{ minWidth: 48, height: 32 }} onMouseDown={(e) => e.preventDefault()} onChange={(e) => execCmd("fontSize", e.target.value)}>
+                      <MenuItem value="1">P</MenuItem>
+                      <MenuItem value="3">Tt</MenuItem>
+                      <MenuItem value="5">H</MenuItem>
+                    </Select>
+                    <IconButton size="small" onClick={() => execCmd("bold")} title="Negrito"><Typography style={{ fontWeight: 700 }}>B</Typography></IconButton>
+                    <IconButton size="small" onClick={() => execCmd("italic")} title="Itálico"><Typography style={{ fontStyle: "italic" }}>I</Typography></IconButton>
+                    <IconButton size="small" onClick={() => execCmd("insertUnorderedList")} title="Lista"><FormatListBulleted fontSize="small" /></IconButton>
+                    <IconButton size="small" onClick={handleInsertLink} title="Link"><Link fontSize="small" /></IconButton>
+                    <IconButton size="small" onClick={() => imageInputRef.current?.click()} title="Inserir imagem"><Image fontSize="small" /></IconButton>
+                    <input type="file" ref={imageInputRef} accept="image/*" className={classes.inputFile} onChange={handleInsertImage} />
                   </div>
-                  <div
-                    ref={editorRef}
-                    className={classes.editorArea}
-                    contentEditable
-                    suppressContentEditableWarning
-                  />
+                  <div ref={editorRef} className={classes.editorArea} contentEditable suppressContentEditableWarning />
                   <div className={classes.editorButtons}>
-                    <Button variant="contained" color="primary" size="small" startIcon={<Save />} onClick={handleSave}>
-                      Salvar
-                    </Button>
-                    <Button variant="outlined" size="small" startIcon={<DeleteOutline />} onClick={handleDiscard}>
-                      Descartar alterações
-                    </Button>
-                    <Button size="small" startIcon={<HelpOutline />}>
-                      Ajuda para formatação
-                    </Button>
+                    <Button variant="contained" color="primary" size="small" startIcon={<Save />} onClick={handleSave}>Salvar</Button>
+                    <Button variant="outlined" size="small" startIcon={<DeleteOutline />} onClick={handleDiscard}>Descartar alterações</Button>
+                    <Button size="small" startIcon={<HelpOutline />}>Ajuda para formatação</Button>
                   </div>
                 </>
               )}
             </Paper>
 
             <Paper elevation={0} className={classes.attachmentsSection}>
-              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 12 }}>
-                Anexos
-              </Typography>
+              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 12 }}>Anexos</Typography>
               {attachments.map((att) => (
                 <div key={att.id} className={classes.attachmentItem}>
                   <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
@@ -610,57 +700,86 @@ export default function QuadroModal({ open, onClose, ticketUuid }) {
                     )}
                     {att.isCapa && <span className={classes.attachmentCapa}>Capa</span>}
                   </div>
-                  <Typography variant="caption" color="textSecondary" style={{ marginRight: 8 }}>
-                    {att.date}
-                  </Typography>
-                  {!att.isCapa && (
-                    <Button size="small" onClick={() => setAsCapa(att.id)}>
-                      Marcar como Capa
-                    </Button>
+                  <Typography variant="caption" color="textSecondary" style={{ marginRight: 8 }}>{att.date}</Typography>
+                  {!readOnly && !att.isCapa && (
+                    <Button size="small" onClick={() => setAsCapa(att.id)}>Marcar como Capa</Button>
                   )}
                 </div>
               ))}
-              <input
-                type="file"
-                ref={fileInputRef}
-                multiple
-                className={classes.inputFile}
-                onChange={handleAddAttachment}
-                accept="image/*,.pdf,.doc,.docx,.cdr,.eps,audio/*"
-              />
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<Add />}
-                className={classes.addAttachmentBtn}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Adicionar (imagens, documentos, áudio)
-              </Button>
+              {!readOnly && (
+                <>
+                  <input type="file" ref={fileInputRef} multiple className={classes.inputFile} onChange={handleAddAttachment} accept="image/*,.pdf,.doc,.docx,.cdr,.eps,audio/*" />
+                  <Button variant="outlined" size="small" startIcon={<Add />} className={classes.addAttachmentBtn} onClick={() => fileInputRef.current?.click()}>
+                    Adicionar (imagens, documentos, áudio)
+                  </Button>
+                </>
+              )}
             </Paper>
 
             <Paper elevation={0} className={classes.logsSection}>
-              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
                 <History fontSize="small" />
-                Logs de Status
+                Histórico de Status
               </Typography>
               {statusLogs.length === 0 ? (
                 <Typography variant="body2" color="textSecondary">
                   Nenhuma alteração de coluna registrada ainda.
                 </Typography>
               ) : (
-                statusLogs.map((log) => (
-                  <div key={log.id} className={classes.logItem}>
-                    <Typography className={classes.logText}>
-                      {log.createdAt
-                        ? `${format(parseISO(log.createdAt), "dd/MM HH:mm")} – ${log.fromLabel || "?"} → ${log.toLabel || "?"}`
-                        : `${log.fromLabel || "?"} → ${log.toLabel || "?"}`}
-                    </Typography>
-                    {log.userName && (
-                      <Typography className={classes.logUser}>por {log.userName}</Typography>
-                    )}
-                  </div>
-                ))
+                <div className={classes.timeline} ref={timelineRef}>
+                  {statusLogs.length > 0 && (
+                    <div
+                      className={classes.timelineRunner}
+                      aria-hidden="true"
+                      style={{
+                        top: runnerTop != null ? runnerTop : 8,
+                        opacity: runnerTop != null ? 1 : 0,
+                      }}
+                    />
+                  )}
+                  {statusLogs.map((log, index) => {
+                    const statusColor = getStatusColor(log.toLabel);
+                    return (
+                      <div
+                        key={log.id}
+                        data-timeline-item
+                        className={classes.timelineItem}
+                        style={{ animationDelay: `${index * 0.1}s` }}
+                      >
+                        <div
+                          className={classes.timelineDot}
+                          style={{
+                            backgroundColor: statusColor,
+                            animationDelay: `${index * 0.1}s, ${index * 0.1 + 0.5}s`,
+                          }}
+                        />
+                        <div
+                          className={classes.timelineCard}
+                          style={{ borderLeftColor: statusColor }}
+                        >
+                          {log.createdAt && (
+                            <div
+                              className={classes.timelineTime}
+                              style={{ color: statusColor }}
+                            >
+                              {format(parseISO(log.createdAt), "dd/MM/yyyy · HH:mm")}
+                            </div>
+                          )}
+                          <Typography className={classes.timelineLabel}>
+                            <span>{log.fromLabel || "?"}</span>
+                            {" → "}
+                            <strong style={{ color: statusColor }}>{log.toLabel || "?"}</strong>
+                          </Typography>
+                          {log.userName && (
+                            <Typography className={classes.timelineUser}>
+                              por {log.userName}
+                            </Typography>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </Paper>
           </>

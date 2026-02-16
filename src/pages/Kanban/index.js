@@ -246,6 +246,7 @@ const Kanban = () => {
   const [chatModalTicketUuid, setChatModalTicketUuid] = useState(null);
   const [quadroModalOpen, setQuadroModalOpen] = useState(false);
   const [quadroModalTicketUuid, setQuadroModalTicketUuid] = useState(null);
+  const [quadroModalReadOnly, setQuadroModalReadOnly] = useState(true);
   const [newTicketModalOpen, setNewTicketModalOpen] = useState(false);
   const [newTicketModalLaneId, setNewTicketModalLaneId] = useState(null);
 
@@ -303,6 +304,7 @@ const Kanban = () => {
 
   const handleVerQuadro = (uuid) => {
     setQuadroModalTicketUuid(uuid);
+    setQuadroModalReadOnly(true);
     setQuadroModalOpen(true);
   };
   const handleWhatsApp = (uuid) => {
@@ -333,6 +335,7 @@ const Kanban = () => {
   const handleEdit = (e, uuid) => {
     e.stopPropagation();
     setQuadroModalTicketUuid(uuid);
+    setQuadroModalReadOnly(false);
     setQuadroModalOpen(true);
   };
   const handleDelete = async (e, ticketId) => {
@@ -367,7 +370,8 @@ const Kanban = () => {
           toLabel,
         });
       } catch (logErr) {
-        // Log opcional; não bloqueia
+        console.error("Erro ao registrar log de status:", logErr);
+        toast.warn("Ticket movido, mas o log de status não foi registrado.");
       }
       fetchTickets();
     } catch (err) {
@@ -598,6 +602,7 @@ const Kanban = () => {
           setQuadroModalTicketUuid(null);
         }}
         ticketUuid={quadroModalTicketUuid}
+        readOnly={quadroModalReadOnly}
       />
 
       <KanbanChatModal
@@ -609,6 +614,7 @@ const Kanban = () => {
         ticketUuid={chatModalTicketUuid}
         onVerQuadro={(uuid) => {
           setQuadroModalTicketUuid(uuid);
+          setQuadroModalReadOnly(true);
           setQuadroModalOpen(true);
         }}
       />
