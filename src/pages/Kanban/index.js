@@ -11,16 +11,17 @@ import {
   Chip,
   IconButton,
   TextField,
-  Box,
   Paper,
   Typography,
 } from "@material-ui/core";
 import WhatsApp from "@material-ui/icons/WhatsApp";
 import Edit from "@material-ui/icons/Edit";
 import Delete from "@material-ui/icons/Delete";
+import Visibility from "@material-ui/icons/Visibility";
 import { format } from "date-fns";
 import { Can } from "../../components/Can";
 import KanbanChatModal from "./KanbanChatModal";
+import QuadroModal from "./QuadroModal";
 import NewTicketModal from "../../components/NewTicketModal";
 import Add from "@material-ui/icons/Add";
 
@@ -122,84 +123,114 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: "#e3f2fd",
   },
   card: {
-    padding: theme.spacing(1.5),
-    borderRadius: 8,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+    padding: 0,
+    borderRadius: 10,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
     backgroundColor: "#fff",
     display: "flex",
     flexDirection: "column",
-    gap: theme.spacing(1),
+    overflow: "hidden",
     cursor: "grab",
+    transition: "box-shadow 0.2s ease",
+    "&:hover": {
+      boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+    },
     "&:active": {
       cursor: "grabbing",
     },
   },
   cardDragging: {
-    opacity: 0.6,
+    opacity: 0.85,
     cursor: "grabbing",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
   },
-  cardTop: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cardLaneLabel: {
-    fontSize: "0.8rem",
-    color: theme.palette.text.secondary,
-  },
-  cardNumber: {
-    fontSize: "0.85rem",
-    fontWeight: 600,
-    color: theme.palette.text.primary,
-  },
-  cardUser: {
+  cardHeader: {
+    padding: theme.spacing(1.25, 1.5),
     display: "flex",
     alignItems: "center",
     gap: theme.spacing(1),
+    minHeight: 0,
   },
   cardAvatar: {
-    width: 28,
-    height: 28,
-    fontSize: "0.75rem",
-  },
-  cardName: {
+    width: 36,
+    height: 36,
     fontSize: "0.85rem",
-    fontWeight: 500,
+    flexShrink: 0,
+  },
+  cardHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  cardClientName: {
+    fontSize: "0.875rem",
+    fontWeight: 600,
+    lineHeight: 1.3,
+    display: "block",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  cardConnection: {
+    fontSize: "0.7rem",
+    color: theme.palette.text.secondary,
+    marginTop: 2,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  cardBadgeWrap: {
+    flexShrink: 0,
+    marginLeft: "auto",
   },
   cardStatus: {
-    marginTop: 4,
     "& .MuiChip-root": {
       height: 24,
-      fontSize: "0.75rem",
-      fontWeight: 500,
+      fontSize: "0.7rem",
+      fontWeight: 600,
       color: "#fff",
     },
   },
   cardActions: {
     display: "flex",
     alignItems: "center",
-    gap: theme.spacing(0.5),
-    marginTop: theme.spacing(1),
-    paddingTop: theme.spacing(1),
-    borderTop: "1px solid #eee",
-  },
-  cardBtnQuadro: {
-    textTransform: "uppercase",
-    fontSize: "0.7rem",
-    fontWeight: 600,
-    padding: "4px 10px",
+    justifyContent: "space-between",
+    padding: theme.spacing(0.75, 1),
+    backgroundColor: theme.palette.grey[50],
+    borderTop: "1px solid",
+    borderColor: theme.palette.divider,
   },
   cardIconBtn: {
-    padding: 6,
+    padding: 8,
     color: theme.palette.text.secondary,
     "&:hover": {
       color: theme.palette.primary.main,
-      backgroundColor: "rgba(0,0,0,0.04)",
+      backgroundColor: "rgba(0,0,0,0.06)",
     },
   },
 }));
 
 const LANE_EM_ABERTO = "lane0";
+
+const getContactImageUrl = (contact) => {
+  const url = contact?.urlPicture || contact?.profilePicUrl;
+  if (!url || typeof url !== "string") return null;
+  let resolved = url;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    const base = process.env.REACT_APP_BACKEND_URL || "";
+    resolved = base + (url.startsWith("/") ? url : "/" + url);
+  }
+  // Corrige URL com porto duplicado (ex: localhost:4000:443)
+  return resolved.replace(/:443(?=\/)/, "");
+};
+
+// Cores do badge por status: vermelho=urgente, laranja=produção, verde=entregue
+function getStatusBadgeColor(laneId, laneTitle, headerColor) {
+  if (laneId === LANE_EM_ABERTO) return "#6c757d";
+  const t = (laneTitle || "").toLowerCase();
+  if (t.includes("entregue") || t.includes("concluido") || t.includes("concluídos")) return "#2e7d32";
+  if (t.includes("produção") || t.includes("producao") || t.includes("criação") || t.includes("criacao")) return "#ed6c02";
+  return "#d32f2f"; // urgente/problema
+}
 
 const Kanban = () => {
   const classes = useStyles();
@@ -213,6 +244,8 @@ const Kanban = () => {
   const [draggingTicketId, setDraggingTicketId] = useState(null);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [chatModalTicketUuid, setChatModalTicketUuid] = useState(null);
+  const [quadroModalOpen, setQuadroModalOpen] = useState(false);
+  const [quadroModalTicketUuid, setQuadroModalTicketUuid] = useState(null);
   const [newTicketModalOpen, setNewTicketModalOpen] = useState(false);
   const [newTicketModalLaneId, setNewTicketModalLaneId] = useState(null);
 
@@ -268,7 +301,10 @@ const Kanban = () => {
   const handleEndDateChange = (e) => setEndDate(e.target.value);
   const handleAddColunas = () => history.push("/tagsKanban");
 
-  const handleVerQuadro = (uuid) => history.push("/tickets/" + uuid);
+  const handleVerQuadro = (uuid) => {
+    setQuadroModalTicketUuid(uuid);
+    setQuadroModalOpen(true);
+  };
   const handleWhatsApp = (uuid) => {
     setChatModalTicketUuid(uuid);
     setChatModalOpen(true);
@@ -296,7 +332,8 @@ const Kanban = () => {
   };
   const handleEdit = (e, uuid) => {
     e.stopPropagation();
-    history.push("/tickets/" + uuid);
+    setQuadroModalTicketUuid(uuid);
+    setQuadroModalOpen(true);
   };
   const handleDelete = async (e, ticketId) => {
     e.stopPropagation();
@@ -312,6 +349,8 @@ const Kanban = () => {
 
   const handleCardMove = async (ticketId, sourceLaneId, targetLaneId) => {
     if (sourceLaneId === targetLaneId) return;
+    const fromLabel = lanes.find((l) => l.id === sourceLaneId)?.title || sourceLaneId;
+    const toLabel = lanes.find((l) => l.id === targetLaneId)?.title || targetLaneId;
     try {
       if (targetLaneId === LANE_EM_ABERTO) {
         await api.delete(`/ticket-tags/${ticketId}`);
@@ -319,6 +358,16 @@ const Kanban = () => {
       } else {
         await api.put(`/ticket-tags/${ticketId}/${targetLaneId}`);
         toast.success("Ticket movido com sucesso.");
+      }
+      try {
+        await api.post(`/tickets/${ticketId}/quadro/log`, {
+          fromLaneId: sourceLaneId,
+          toLaneId: targetLaneId,
+          fromLabel,
+          toLabel,
+        });
+      } catch (logErr) {
+        // Log opcional; não bloqueia
       }
       fetchTickets();
     } catch (err) {
@@ -475,7 +524,7 @@ const Kanban = () => {
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, lane.id)}
             >
-              {lane.tickets.map((ticket, index) => (
+              {lane.tickets.map((ticket) => (
                 <Paper
                   key={ticket.id}
                   elevation={0}
@@ -486,66 +535,47 @@ const Kanban = () => {
                   onDragStart={(e) => handleDragStart(e, ticket.id, lane.id)}
                   onDragEnd={handleDragEnd}
                 >
-                  <div className={classes.cardTop}>
-                    <span className={classes.cardLaneLabel}>{lane.title}</span>
-                    <span className={classes.cardNumber}>{index + 1}</span>
-                  </div>
-                  <div className={classes.cardUser}>
+                  <div className={classes.cardHeader}>
                     <Avatar
                       className={classes.cardAvatar}
-                      src={ticket.contact?.urlPicture}
+                      src={getContactImageUrl(ticket.contact)}
                       alt={ticket.contact?.name}
                     >
                       {(ticket.contact?.name || "?").charAt(0).toUpperCase()}
                     </Avatar>
-                    <Typography className={classes.cardName} noWrap>
-                      {ticket.contact?.name || "-"}
-                      {ticket.whatsapp?.name ? ` - ${ticket.whatsapp.name}` : ""}
-                    </Typography>
-                  </div>
-                  <div className={classes.cardStatus}>
-                    <Chip
-                      size="small"
-                      label={`Status: ${lane.statusLabel}`}
-                      style={{
-                        backgroundColor:
-                          lane.id === LANE_EM_ABERTO ? "#6c757d" : lane.headerColor || "#1976d2",
-                        color: "#fff",
-                      }}
-                    />
+                    <div className={classes.cardHeaderText}>
+                      <Typography className={classes.cardClientName} title={ticket.contact?.name}>
+                        {ticket.contact?.name || "-"}
+                      </Typography>
+                      {ticket.whatsapp?.name && (
+                        <Typography className={classes.cardConnection} title={ticket.whatsapp.name}>
+                          {ticket.whatsapp.name}
+                        </Typography>
+                      )}
+                    </div>
+                    <div className={classes.cardBadgeWrap}>
+                      <Chip
+                        size="small"
+                        label={lane.statusLabel}
+                        className={classes.cardStatus}
+                        style={{
+                          backgroundColor: getStatusBadgeColor(lane.id, lane.title, lane.headerColor),
+                          color: "#fff",
+                        }}
+                      />
+                    </div>
                   </div>
                   <div className={classes.cardActions} data-no-drag>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      size="small"
-                      className={classes.cardBtnQuadro}
-                      onClick={() => handleVerQuadro(ticket.uuid)}
-                    >
-                      VER QUADRO
-                    </Button>
-                    <IconButton
-                      size="small"
-                      className={classes.cardIconBtn}
-                      onClick={() => handleWhatsApp(ticket.uuid)}
-                      title="WhatsApp"
-                    >
+                    <IconButton size="small" className={classes.cardIconBtn} onClick={() => handleVerQuadro(ticket.uuid)} title="Ver Quadro">
+                      <Visibility fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" className={classes.cardIconBtn} onClick={() => handleWhatsApp(ticket.uuid)} title="WhatsApp">
                       <WhatsApp fontSize="small" />
                     </IconButton>
-                    <IconButton
-                      size="small"
-                      className={classes.cardIconBtn}
-                      onClick={(e) => handleEdit(e, ticket.uuid)}
-                      title="Editar"
-                    >
+                    <IconButton size="small" className={classes.cardIconBtn} onClick={(e) => handleEdit(e, ticket.uuid)} title="Editar">
                       <Edit fontSize="small" />
                     </IconButton>
-                    <IconButton
-                      size="small"
-                      className={classes.cardIconBtn}
-                      onClick={(e) => handleDelete(e, ticket.id)}
-                      title="Excluir"
-                    >
+                    <IconButton size="small" className={classes.cardIconBtn} onClick={(e) => handleDelete(e, ticket.id)} title="Excluir">
                       <Delete fontSize="small" />
                     </IconButton>
                   </div>
@@ -561,6 +591,15 @@ const Kanban = () => {
         onClose={handleCloseNewTicketModal}
       />
 
+      <QuadroModal
+        open={quadroModalOpen}
+        onClose={() => {
+          setQuadroModalOpen(false);
+          setQuadroModalTicketUuid(null);
+        }}
+        ticketUuid={quadroModalTicketUuid}
+      />
+
       <KanbanChatModal
         open={chatModalOpen}
         onClose={() => {
@@ -568,6 +607,10 @@ const Kanban = () => {
           setChatModalTicketUuid(null);
         }}
         ticketUuid={chatModalTicketUuid}
+        onVerQuadro={(uuid) => {
+          setQuadroModalTicketUuid(uuid);
+          setQuadroModalOpen(true);
+        }}
       />
     </div>
   );

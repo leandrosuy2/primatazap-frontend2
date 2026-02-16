@@ -50,6 +50,7 @@ import TagsKanban from "../pages/TagsKanban";
 import ForgotPassword from "../pages/ForgetPassWord";
 import ResetPassword from "../pages/ResetPassword";
 import Tutoriais from "../pages/Tutoriais";
+import Quadro from "../pages/Quadro";
 
 
 const Routes = () => {
@@ -117,6 +118,7 @@ const Routes = () => {
                 <Route exact path="/files" component={Files} isPrivate />
                 <Route exact path="/moments" component={ChatMoments} isPrivate />
                 <Route exact path="/kanban" component={Kanban} isPrivate />
+                <Route exact path="/quadro/:ticketUuid" component={Quadro} isPrivate />
                 <Route exact path="/TagsKanban" component={TagsKanban} isPrivate />
                 <Route exact path="/prompts" component={Prompts} isPrivate />
                 <Route exact path="/allConnections" component={AllConnections} isPrivate />
