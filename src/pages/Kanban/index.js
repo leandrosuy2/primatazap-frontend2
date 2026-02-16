@@ -23,7 +23,9 @@ import { Can } from "../../components/Can";
 import KanbanChatModal from "./KanbanChatModal";
 import QuadroModal from "./QuadroModal";
 import NewTicketModal from "../../components/NewTicketModal";
+import TagModal from "../../components/TagModal";
 import Add from "@material-ui/icons/Add";
+import DragIndicator from "@material-ui/icons/DragIndicator";
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -77,6 +79,15 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: 8,
     overflow: "hidden",
     backgroundColor: theme.palette.background.default,
+    transition: "box-shadow 0.2s, opacity 0.2s",
+  },
+  columnDragging: {
+    opacity: 0.7,
+    boxShadow: theme.shadows[8],
+  },
+  columnDropTarget: {
+    boxShadow: `inset 0 0 0 3px ${theme.palette.primary.main}`,
+    borderRadius: 8,
   },
   columnHeader: {
     padding: theme.spacing(1.5, 2),
@@ -249,6 +260,9 @@ const Kanban = () => {
   const [quadroModalReadOnly, setQuadroModalReadOnly] = useState(true);
   const [newTicketModalOpen, setNewTicketModalOpen] = useState(false);
   const [newTicketModalLaneId, setNewTicketModalLaneId] = useState(null);
+  const [draggingColumnId, setDraggingColumnId] = useState(null);
+  const [dragOverColumnId, setDragOverColumnId] = useState(null);
+  const [editColumnTag, setEditColumnTag] = useState(null);
 
   const queueIds = user.queues.map((q) => q.UserQueue.queueId);
 
@@ -301,6 +315,62 @@ const Kanban = () => {
   const handleStartDateChange = (e) => setStartDate(e.target.value);
   const handleEndDateChange = (e) => setEndDate(e.target.value);
   const handleAddColunas = () => history.push("/tagsKanban");
+
+  const handleColumnDragStart = (e, laneId) => {
+    if (laneId === LANE_EM_ABERTO) return;
+    e.dataTransfer.setData("application/json", JSON.stringify({ type: "column", laneId }));
+    e.dataTransfer.effectAllowed = "move";
+    setDraggingColumnId(laneId);
+  };
+
+  const handleColumnDragOver = (e, laneId) => {
+    if (laneId === LANE_EM_ABERTO) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverColumnId(laneId);
+  };
+
+  const handleColumnDragLeave = (e) => {
+    if (!e.currentTarget.contains(e.relatedTarget)) setDragOverColumnId(null);
+  };
+
+  const handleColumnDrop = (e, targetLaneId) => {
+    e.preventDefault();
+    setDragOverColumnId(null);
+    setDraggingColumnId(null);
+    const raw = e.dataTransfer.getData("application/json");
+    if (!raw) return;
+    try {
+      const { type, laneId: sourceLaneId } = JSON.parse(raw);
+      if (type !== "column" || sourceLaneId === LANE_EM_ABERTO || targetLaneId === LANE_EM_ABERTO || sourceLaneId === targetLaneId) return;
+      const fromIdx = tags.findIndex((t) => String(t.id) === sourceLaneId);
+      const toIdx = tags.findIndex((t) => String(t.id) === targetLaneId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const newTags = [...tags];
+      const [removed] = newTags.splice(fromIdx, 1);
+      newTags.splice(toIdx, 0, removed);
+      setTags(newTags);
+      toast.success("Ordem das colunas atualizada.");
+      try {
+        api.put("/tag/kanban/reorder", { tagIds: newTags.map((t) => t.id) }).catch(() => {});
+      } catch (err) {}
+    } catch (err) {}
+  };
+
+  const handleColumnDragEnd = () => {
+    setDraggingColumnId(null);
+    setDragOverColumnId(null);
+  };
+
+  const handleEditColumn = (e, tag) => {
+    e.stopPropagation();
+    setEditColumnTag(tag);
+  };
+
+  const handleCloseTagModal = () => {
+    setEditColumnTag(null);
+    fetchTags();
+  };
 
   const handleVerQuadro = (uuid) => {
     setQuadroModalTicketUuid(uuid);
@@ -419,7 +489,13 @@ const Kanban = () => {
     const raw = e.dataTransfer.getData("application/json");
     if (!raw) return;
     try {
-      const { ticketId, sourceLaneId } = JSON.parse(raw);
+      const data = JSON.parse(raw);
+      if (data.type === "column") {
+        handleColumnDrop(e, targetLaneId);
+        return;
+      }
+      const { ticketId, sourceLaneId } = data;
+      if (!ticketId) return;
       handleCardMove(ticketId, sourceLaneId, targetLaneId);
     } catch (err) {
       console.error(err);
@@ -498,15 +574,49 @@ const Kanban = () => {
       </header>
 
       <div className={classes.columnsWrapper}>
-        {lanes.map((lane) => (
-          <div key={lane.id} className={classes.column}>
+        {lanes.map((lane) => {
+          const isTagColumn = lane.id !== LANE_EM_ABERTO;
+          const tag = isTagColumn ? tags.find((t) => String(t.id) === lane.id) : null;
+          return (
+          <div
+            key={lane.id}
+            className={`${classes.column} ${
+              draggingColumnId === lane.id ? classes.columnDragging : ""
+            } ${dragOverColumnId === lane.id ? classes.columnDropTarget : ""}`}
+            onDragOver={isTagColumn ? (e) => handleColumnDragOver(e, lane.id) : undefined}
+            onDragLeave={isTagColumn ? handleColumnDragLeave : undefined}
+            onDrop={isTagColumn ? (e) => handleColumnDrop(e, lane.id) : undefined}
+          >
             <div
               className={`${classes.columnHeader} ${
                 lane.id === LANE_EM_ABERTO ? classes.columnHeaderEmAberto : ""
               }`}
               style={lane.headerColor ? { backgroundColor: lane.headerColor } : undefined}
             >
-              <span>{lane.title}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, flex: 1 }}>
+                {isTagColumn && (
+                  <span
+                    draggable
+                    onDragStart={(e) => handleColumnDragStart(e, lane.id)}
+                    onDragEnd={handleColumnDragEnd}
+                    style={{ cursor: "grab", display: "flex", color: "rgba(255,255,255,0.9)" }}
+                    title="Arrastar para reordenar"
+                  >
+                    <DragIndicator style={{ fontSize: 20 }} />
+                  </span>
+                )}
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{lane.title}</span>
+                {isTagColumn && tag && (
+                  <IconButton
+                    size="small"
+                    style={{ color: "rgba(255,255,255,0.9)", padding: 4 }}
+                    onClick={(e) => handleEditColumn(e, tag)}
+                    title="Editar coluna"
+                  >
+                    <Edit style={{ fontSize: 18 }} />
+                  </IconButton>
+                )}
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span>{lane.tickets.length}</span>
                 <Button
@@ -587,13 +697,23 @@ const Kanban = () => {
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <NewTicketModal
         modalOpen={newTicketModalOpen}
         onClose={handleCloseNewTicketModal}
       />
+
+      {editColumnTag && (
+        <TagModal
+          open={!!editColumnTag}
+          onClose={handleCloseTagModal}
+          tagId={editColumnTag.id}
+          kanban={1}
+        />
+      )}
 
       <QuadroModal
         open={quadroModalOpen}
