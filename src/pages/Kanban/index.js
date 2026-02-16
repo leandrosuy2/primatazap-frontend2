@@ -230,8 +230,21 @@ const getContactImageUrl = (contact) => {
     const base = process.env.REACT_APP_BACKEND_URL || "";
     resolved = base + (url.startsWith("/") ? url : "/" + url);
   }
-  // Corrige URL com porto duplicado (ex: localhost:4000:443)
   return resolved.replace(/:443(?=\/)/, "");
+};
+
+// Thumbnail do card: capa do quadro se existir, senão foto do contato
+const getCardImageUrl = (ticket) => {
+  const capa = ticket?.quadroCapaUrl || ticket?.capaUrl;
+  if (capa && typeof capa === "string") {
+    let resolved = capa;
+    if (!capa.startsWith("http://") && !capa.startsWith("https://")) {
+      const base = process.env.REACT_APP_BACKEND_URL || "";
+      resolved = base + (capa.startsWith("/") ? capa : "/" + capa);
+    }
+    return resolved.replace(/:443(?=\/)/, "");
+  }
+  return getContactImageUrl(ticket?.contact);
 };
 
 // Cores do badge por status: vermelho=urgente, laranja=produção, verde=entregue
@@ -652,12 +665,17 @@ const Kanban = () => {
                   <div className={classes.cardHeader}>
                     <Avatar
                       className={classes.cardAvatar}
-                      src={getContactImageUrl(ticket.contact)}
+                      src={getCardImageUrl(ticket)}
                       alt={ticket.contact?.name}
                     >
                       {(ticket.contact?.name || "?").charAt(0).toUpperCase()}
                     </Avatar>
                     <div className={classes.cardHeaderText}>
+                      {(ticket.nomeProjeto || ticket.nomeEmpresa || ticket.quadroNomeProjeto) && (
+                        <Typography variant="caption" color="textSecondary" noWrap title={ticket.nomeProjeto || ticket.nomeEmpresa || ticket.quadroNomeProjeto}>
+                          {ticket.nomeProjeto || ticket.nomeEmpresa || ticket.quadroNomeProjeto}
+                        </Typography>
+                      )}
                       <Typography className={classes.cardClientName} title={ticket.contact?.name}>
                         {ticket.contact?.name || "-"}
                       </Typography>

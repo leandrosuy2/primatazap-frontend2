@@ -29,6 +29,7 @@ import Image from "@material-ui/icons/Image";
 import FormatListBulleted from "@material-ui/icons/FormatListBulleted";
 import Add from "@material-ui/icons/Add";
 import AttachFile from "@material-ui/icons/AttachFile";
+import Delete from "@material-ui/icons/Delete";
 import History from "@material-ui/icons/History";
 import api from "../../services/api";
 import { format, parseISO } from "date-fns";
@@ -286,6 +287,9 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
   const [selectedNewContact, setSelectedNewContact] = useState(null);
   const [loadingContact, setLoadingContact] = useState(false);
   const [runnerTop, setRunnerTop] = useState(null);
+  const [valorServico, setValorServico] = useState(0);
+  const [valorEntrada, setValorEntrada] = useState(0);
+  const [nomeProjeto, setNomeProjeto] = useState("");
 
   const resolveImageUrl = (url) => {
     if (!url || typeof url !== "string") return null;
@@ -311,6 +315,13 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
         if (quadroData.quadro) {
           quadroStatus = quadroData.quadro.status || "aguardando";
           quadroDescription = quadroData.quadro.description || "";
+          setValorServico(Number(quadroData.quadro.valorServico) || 0);
+          setValorEntrada(Number(quadroData.quadro.valorEntrada) || 0);
+          setNomeProjeto(quadroData.quadro.nomeProjeto || quadroData.quadro.nomeEmpresa || "");
+        } else {
+          setValorServico(0);
+          setValorEntrada(0);
+          setNomeProjeto("");
         }
         if (Array.isArray(quadroData.attachments)) {
           quadroAttachments = quadroData.attachments.map((a) => ({
@@ -362,6 +373,9 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
       setDescription("");
       setAttachments([]);
       setStatusLogs([]);
+      setValorServico(0);
+      setValorEntrada(0);
+      setNomeProjeto("");
       setEditMode(false);
       setChangeClientOpen(false);
       setRunnerTop(null);
@@ -485,6 +499,33 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
       toast.success("Capa atualizada.");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Erro ao marcar capa.");
+    }
+  };
+
+  const handleDeleteAttachment = async (id) => {
+    if (!ticket?.id) return;
+    try {
+      await api.delete("/tickets/" + ticket.id + "/quadro/attachments/" + id);
+      const deleted = attachments.find((a) => a.id === id);
+      const remaining = attachments.filter((a) => a.id !== id);
+      setAttachments(remaining);
+      if (deleted?.isCapa) {
+        const next = remaining[0];
+        setCoverImage(next?.url ? resolveImageUrl(next.url) : resolveImageUrl(ticket.contact?.urlPicture || ticket.contact?.profilePicUrl));
+      }
+      toast.success("Anexo excluído.");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Erro ao excluir.");
+    }
+  };
+
+  const handleSaveValores = async () => {
+    if (!ticket?.id) return;
+    try {
+      await api.put("/tickets/" + ticket.id + "/quadro", { valorServico, valorEntrada, nomeProjeto: nomeProjeto || undefined });
+      toast.success("Valores e nome salvos.");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Erro ao salvar.");
     }
   };
 
@@ -685,6 +726,50 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
               )}
             </Paper>
 
+            <Paper elevation={0} style={{ padding: 16, marginBottom: 16 }}>
+              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 12 }}>Nome do Projeto / Empresa</Typography>
+              <TextField
+                fullWidth
+                size="small"
+                placeholder="Ex.: Placa RF Personalizados"
+                value={nomeProjeto || ""}
+                onChange={(e) => setNomeProjeto(e.target.value)}
+                disabled={readOnly}
+                style={{ marginBottom: 16 }}
+              />
+              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 12 }}>Valores</Typography>
+              <Box display="flex" flexWrap="wrap" alignItems="center" gridGap={16}>
+                <TextField
+                  type="number"
+                  label="Valor do Serviço"
+                  value={valorServico || ""}
+                  onChange={(e) => setValorServico(parseFloat(e.target.value) || 0)}
+                  inputProps={{ min: 0, step: 0.01 }}
+                  size="small"
+                  style={{ width: 140 }}
+                  disabled={readOnly}
+                />
+                <TextField
+                  type="number"
+                  label="Valor de Entrada"
+                  value={valorEntrada || ""}
+                  onChange={(e) => setValorEntrada(parseFloat(e.target.value) || 0)}
+                  inputProps={{ min: 0, step: 0.01 }}
+                  size="small"
+                  style={{ width: 140 }}
+                  disabled={readOnly}
+                />
+                <Typography variant="body1" style={{ fontWeight: 600 }}>
+                  Saldo restante: R$ {(Number(valorServico) - Number(valorEntrada)).toFixed(2)}
+                </Typography>
+                {!readOnly && (
+                  <Button variant="outlined" size="small" startIcon={<Save />} onClick={handleSaveValores}>
+                    Salvar valores e nome
+                  </Button>
+                )}
+              </Box>
+            </Paper>
+
             <Paper elevation={0} className={classes.attachmentsSection}>
               <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 12 }}>Anexos</Typography>
               {attachments.map((att) => (
@@ -703,6 +788,13 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   <Typography variant="caption" color="textSecondary" style={{ marginRight: 8 }}>{att.date}</Typography>
                   {!readOnly && !att.isCapa && (
                     <Button size="small" onClick={() => setAsCapa(att.id)}>Marcar como Capa</Button>
+                  )}
+                  {!readOnly && (
+                    <Tooltip title="Excluir anexo">
+                      <IconButton size="small" onClick={() => handleDeleteAttachment(att.id)} color="secondary">
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   )}
                 </div>
               ))}

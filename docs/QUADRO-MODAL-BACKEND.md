@@ -4,6 +4,15 @@ Este documento reúne **tudo** que o backend precisa implementar para o Quadro K
 
 ---
 
+## Atualização (valores + excluir anexo + capa no card)
+
+- **Quadro:** incluir no modelo e no GET do quadro os campos `valorServico` e `valorEntrada` (decimal). Novo **PUT** `/tickets/:ticketId/quadro` com body `{ valorServico, valorEntrada }` para salvar.
+- **Excluir anexo:** o front chama **DELETE** `/tickets/:ticketId/quadro/attachments/:attachmentId` (com `ticketId` numérico). Implementar remoção do registro e, se quiser, do arquivo.
+- **Thumbnail no card:** na resposta de **GET /ticket/kanban**, opcionalmente incluir em cada ticket o campo `quadroCapaUrl` (ou `capaUrl`) com a URL do anexo marcado como capa do quadro, para o card exibir a capa em vez da foto do contato.
+- **Nome do Projeto no card:** na listagem **GET /ticket/kanban**, incluir em cada ticket o campo `nomeProjeto` (ou `nomeEmpresa` / `quadroNomeProjeto`) quando o quadro tiver esse dado preenchido, para exibir no card acima do nome do contato.
+
+---
+
 ## Resumo das rotas novas/alteradas
 
 | Ação | Método | URL | Body |
@@ -55,18 +64,23 @@ Este documento reúne **tudo** que o backend precisa implementar para o Quadro K
 
 ## 2. Listagem Kanban – foto do contato no card
 
-O front monta os **cards** com a foto do contato. Para a imagem aparecer:
+O front monta os **cards** com a foto do contato ou, se existir, com a **capa do quadro**.
 
 - Na resposta de **`GET /ticket/kanban`**, cada item de `tickets[]` deve ter `contact` com **pelo menos um** destes campos preenchidos:
   - `contact.urlPicture` – ex.: URL completa ou path como `"/public/company1/contacts/123.jpeg"`.
   - `contact.profilePicUrl` – ex.: foto do WhatsApp.
 
+**Thumbnail da capa no card (opcional):** se o backend incluir em cada ticket o campo **`quadroCapaUrl`** (ou `capaUrl`) com a URL do anexo marcado como capa do quadro, o front usa essa imagem no card em vez da foto do contato. Caso não exista quadro/capa, o card continua usando a foto do contato.
+
+- Para preencher `quadroCapaUrl`: na montagem da listagem do Kanban, para cada ticket que tiver quadro com um anexo `isCapa === true`, colocar em `ticket.quadroCapaUrl` a URL desse anexo (ex.: `baseURL + "/public/" + path` ou a URL já absoluta).
+
 O front trata assim:
 
 - Se vier URL completa (`http://` ou `https://`), usa direto.
 - Se vier path (ex.: `/public/...`), o front concatena com `REACT_APP_BACKEND_URL`.
+- Corrige porto duplicado (ex.: `localhost:4000:443` → `localhost:4000`).
 
-**Recomendação:** na listagem do Kanban, incluir no `contact` pelo menos `id`, `name`, `number`, `urlPicture` (e, se tiver, `profilePicUrl`). Assim a imagem do contato aparece no card sem chamada extra.
+**Recomendação:** na listagem do Kanban, incluir no `contact` pelo menos `id`, `name`, `number`, `urlPicture` (e, se tiver, `profilePicUrl`). Se quiser capa no card, incluir `quadroCapaUrl` (ou `capaUrl`) por ticket quando houver capa.
 
 ---
 
@@ -80,6 +94,9 @@ quadro / ticket_quadro
 - ticketId (FK → tickets, UNIQUE)
 - status (string: "aguardando" | "em_producao" | "entregue" | "cancelado")
 - description (text, nullable)  // HTML do editor
+- valorServico (decimal, nullable)  // valor do serviço
+- valorEntrada (decimal, nullable)  // valor de entrada; saldo = valorServico - valorEntrada
+- nomeProjeto (string, nullable)    // nome do projeto/empresa (exibido no card e editável no modal)
 - createdAt, updatedAt
 ```
 
@@ -147,6 +164,9 @@ Carrega tudo para abrir o modal Quadro (ticket, quadro, anexos).
     "ticketId": 8,
     "status": "aguardando",
     "description": "<p>PLACA EM PVC ADESIVADA COM FITA DUPLA FACE ATRÁS</p>",
+    "valorServico": 1500.00,
+    "valorEntrada": 500.00,
+    "nomeProjeto": "Placa RF Personalizados",
     "updatedAt": "2026-02-16T18:54:34.670Z"
   },
   "attachments": [
@@ -232,15 +252,36 @@ Valores: `"aguardando"` | `"em_producao"` | `"entregue"` | `"cancelado"`.
 
 ---
 
-### 4.6 DELETE `/tickets/:ticketUuid/quadro/attachments/:attachmentId`
+### 4.6 DELETE `/tickets/:ticketId/quadro/attachments/:attachmentId`
 
-- Remover registro e, se quiser, arquivo do disco.
+O front chama com **ticketId** (número). Remover registro e, se quiser, arquivo do disco. Se o anexo era a capa, o front passa a usar o primeiro anexo restante ou a foto do contato.
 
 **Response 204** (ou 200 sem body).
 
 ---
 
-### 4.7 PUT `/tickets/:ticketId/contact`
+### 4.7 PUT `/tickets/:ticketId/quadro` (valores)
+
+Usado pelo front para salvar **Valor do Serviço** e **Valor de Entrada** (saldo restante é calculado no front: valorServico − valorEntrada).
+
+**Body**
+
+```json
+{
+  "valorServico": 1500.00,
+  "valorEntrada": 500.00,
+  "nomeProjeto": "Placa RF Personalizados"
+}
+```
+
+- Atualizar no registro do Quadro os campos `valorServico`, `valorEntrada` e `nomeProjeto` (opcional).
+- Aceitar apenas esses campos neste endpoint ou estender o payload conforme sua API (ex.: aceitar também `description`/`status` no mesmo PUT).
+
+**Response 200** (objeto quadro atualizado) ou 204.
+
+---
+
+### 4.8 PUT `/tickets/:ticketId/contact`
 
 Usado no “Trocar cliente” do modal Quadro.
 
@@ -259,7 +300,7 @@ Usado no “Trocar cliente” do modal Quadro.
 
 ---
 
-### 4.8 POST `/tickets/:ticketId/quadro/log`
+### 4.9 POST `/tickets/:ticketId/quadro/log`
 
 Chamado pelo front quando o usuário **arrasta o card** para outra coluna (além da chamada que já existe de tag).
 
@@ -280,7 +321,7 @@ Chamado pelo front quando o usuário **arrasta o card** para outra coluna (além
 
 ---
 
-### 4.9 GET `/tickets/:ticketUuid/quadro/logs` (opcional)
+### 4.10 GET `/tickets/:ticketId/quadro/logs` (opcional)
 
 Para exibir “Histórico” de mudanças de coluna no modal.
 
@@ -309,12 +350,13 @@ Para exibir “Histórico” de mudanças de coluna no modal.
 | Abrir modal Quadro | GET | `/tickets/:ticketUuid/quadro` | - |
 | Salvar status do quadro | PUT | `/tickets/:ticketUuid/quadro/status` | `{ "status": "..." }` |
 | Salvar descrição | PUT | `/tickets/:ticketUuid/quadro/description` | `{ "description": "<p>...</p>" }` |
+| Salvar valores e nome do projeto | PUT | `/tickets/:ticketId/quadro` | `{ "valorServico", "valorEntrada", "nomeProjeto"? }` |
 | Upload anexo | POST | `/tickets/:ticketUuid/quadro/attachments` | multipart, campo `file` |
 | Marcar anexo como capa | PATCH | `/tickets/:ticketUuid/quadro/attachments/:attachmentId/capa` | - |
-| Excluir anexo | DELETE | `/tickets/:ticketUuid/quadro/attachments/:attachmentId` | - |
+| Excluir anexo | DELETE | `/tickets/:ticketId/quadro/attachments/:attachmentId` | - |
 | Trocar cliente do ticket | PUT | `/tickets/:ticketId/contact` | `{ "contactId": number }` |
 | Registrar log (drag) | POST | `/tickets/:ticketId/quadro/log` | `{ fromLaneId, toLaneId, fromLabel?, toLabel? }` |
-| Histórico de logs | GET | `/tickets/:ticketUuid/quadro/logs` | - |
+| Histórico de logs | GET | `/tickets/:ticketId/quadro/logs` | - |
 
 ---
 
@@ -335,16 +377,17 @@ Garantir ainda que **GET /ticket/kanban** devolva em cada ticket `contact.urlPic
 
 ## 7. Checklist final
 
-- [ ] **GET /ticket/kanban** – em cada ticket, `contact` com `urlPicture` ou `profilePicUrl`.
-- [ ] Tabela Quadro (ticketId, status, description).
+- [ ] **GET /ticket/kanban** – em cada ticket, `contact` com `urlPicture` ou `profilePicUrl`; opcionalmente `quadroCapaUrl` (ou `capaUrl`) para thumbnail da capa; opcionalmente `nomeProjeto` (ou `nomeEmpresa`/`quadroNomeProjeto`) para nome do projeto no card.
+- [ ] Tabela Quadro (ticketId, status, description, valorServico, valorEntrada, nomeProjeto).
 - [ ] Tabela QuadroAnexo (ticketId, name, path, isCapa).
 - [ ] Tabela QuadroStatusLog (ticketId, fromLaneId, toLaneId, userId, createdAt).
-- [ ] **GET** `/tickets/:ticketUuid/quadro` → ticket + quadro + attachments.
+- [ ] **GET** `/tickets/:ticketUuid/quadro` → ticket + quadro (com valorServico, valorEntrada) + attachments.
 - [ ] **PUT** `/tickets/:ticketUuid/quadro/status`.
 - [ ] **PUT** `/tickets/:ticketUuid/quadro/description`.
+- [ ] **PUT** `/tickets/:ticketId/quadro` com body `{ valorServico, valorEntrada, nomeProjeto? }`.
 - [ ] **POST** `/tickets/:ticketUuid/quadro/attachments` (multipart).
 - [ ] **PATCH** `/tickets/:ticketUuid/quadro/attachments/:id/capa`.
-- [ ] **DELETE** `/tickets/:ticketUuid/quadro/attachments/:id` (opcional).
+- [ ] **DELETE** `/tickets/:ticketId/quadro/attachments/:id`.
 - [ ] Servir arquivos de anexo em URL acessível (ex.: `public/companyX/quadro/:ticketId/`).
 - [ ] **PUT** `/tickets/:ticketId/contact` com `{ contactId }`.
 - [ ] **POST** `/tickets/:ticketId/quadro/log` ao arrastar card.

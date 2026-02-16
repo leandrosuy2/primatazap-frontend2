@@ -1720,6 +1720,8 @@ const messages = {
         ERR_NO_OTHER_WHATSAPP: "Deve haver pelo menos um WhatsApp padrão.",
         ERR_NO_DEF_WAPP_FOUND:
           "Nenhum WhatsApp padrão encontrado. Verifique a página de conexões.",
+        "ERR_NO_DEF_WAPP_FOUND in COMPANY null":
+          "Nenhuma conexão WhatsApp padrão encontrada para esta empresa. Configure uma conexão WhatsApp no menu Conexões e defina-a como padrão.",
         ERR_WAPP_NOT_INITIALIZED:
           "Esta sessão do WhatsApp não foi inicializada. Verifique a página de conexões.",
         ERR_WAPP_CHECK_CONTACT:

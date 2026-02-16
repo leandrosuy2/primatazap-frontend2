@@ -398,7 +398,7 @@ const Contacts = () => {
 
     const handleimportContact = async () => {
         try {
-            await api.post("/contacts/import");
+            await api.post("/contacts/import", { companyId: user?.companyId });
             history.go(0);
             setImportContacts(false);
         } catch (err) {
@@ -409,7 +409,7 @@ const Contacts = () => {
 
     const handleimportChats = async () => {
         try {
-            await api.post("/contacts/import/chats");
+            await api.post("/contacts/import/chats", { companyId: user?.companyId });
             history.go(0);
         } catch (err) {
             toastError(err);
