@@ -21,6 +21,8 @@ import Delete from "@material-ui/icons/Delete";
 import { format } from "date-fns";
 import { Can } from "../../components/Can";
 import KanbanChatModal from "./KanbanChatModal";
+import NewTicketModal from "../../components/NewTicketModal";
+import Add from "@material-ui/icons/Add";
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -83,6 +85,26 @@ const useStyles = makeStyles((theme) => ({
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    flexWrap: "wrap",
+    gap: theme.spacing(1),
+  },
+  columnHeaderButton: {
+    color: "#fff",
+    fontSize: "0.65rem",
+    fontWeight: 500,
+    textTransform: "none",
+    padding: "2px 6px",
+    minWidth: "auto",
+    lineHeight: 1.2,
+    "& .MuiButton-startIcon": {
+      marginRight: 4,
+      "& svg": { fontSize: 14 },
+    },
+    borderColor: "rgba(255,255,255,0.7)",
+    "&:hover": {
+      borderColor: "#fff",
+      backgroundColor: "rgba(255,255,255,0.12)",
+    },
   },
   columnHeaderEmAberto: {
     backgroundColor: "#6c757d",
@@ -191,6 +213,8 @@ const Kanban = () => {
   const [draggingTicketId, setDraggingTicketId] = useState(null);
   const [chatModalOpen, setChatModalOpen] = useState(false);
   const [chatModalTicketUuid, setChatModalTicketUuid] = useState(null);
+  const [newTicketModalOpen, setNewTicketModalOpen] = useState(false);
+  const [newTicketModalLaneId, setNewTicketModalLaneId] = useState(null);
 
   const queueIds = user.queues.map((q) => q.UserQueue.queueId);
 
@@ -248,6 +272,27 @@ const Kanban = () => {
   const handleWhatsApp = (uuid) => {
     setChatModalTicketUuid(uuid);
     setChatModalOpen(true);
+  };
+
+  const handleOpenNewTicketModal = (laneId) => {
+    setNewTicketModalLaneId(laneId);
+    setNewTicketModalOpen(true);
+  };
+
+  const handleCloseNewTicketModal = (ticket) => {
+    if (ticket?.id && newTicketModalLaneId && newTicketModalLaneId !== LANE_EM_ABERTO) {
+      api
+        .put(`/ticket-tags/${ticket.id}/${newTicketModalLaneId}`)
+        .then(() => fetchTickets())
+        .catch((err) => {
+          console.error(err);
+          fetchTickets();
+        });
+    } else if (ticket?.id) {
+      fetchTickets();
+    }
+    setNewTicketModalOpen(false);
+    setNewTicketModalLaneId(null);
   };
   const handleEdit = (e, uuid) => {
     e.stopPropagation();
@@ -409,7 +454,18 @@ const Kanban = () => {
               style={lane.headerColor ? { backgroundColor: lane.headerColor } : undefined}
             >
               <span>{lane.title}</span>
-              <span>{lane.tickets.length}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span>{lane.tickets.length}</span>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  className={classes.columnHeaderButton}
+                  startIcon={<Add style={{ fontSize: 14 }} />}
+                  onClick={() => handleOpenNewTicketModal(lane.id)}
+                >
+                  Adicionar cartão
+                </Button>
+              </div>
             </div>
             <div
               className={`${classes.columnCards} ${
@@ -499,6 +555,11 @@ const Kanban = () => {
           </div>
         ))}
       </div>
+
+      <NewTicketModal
+        modalOpen={newTicketModalOpen}
+        onClose={handleCloseNewTicketModal}
+      />
 
       <KanbanChatModal
         open={chatModalOpen}
