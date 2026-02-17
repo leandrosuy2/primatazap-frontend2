@@ -22,7 +22,7 @@ import { isNil } from 'lodash';
 import { EditMessageProvider } from "../../context/EditingMessage/EditingMessageContext";
 import { TicketsContext } from "../../context/Tickets/TicketsContext";
 
-const drawerWidth = 320;
+const drawerWidth = 450;
 
 const useStyles = makeStyles((theme) => ({
   root: {

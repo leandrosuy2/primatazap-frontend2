@@ -485,35 +485,35 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
     setContactFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleContactSaveField = async (field) => {
+  const handleSaveAllContactFields = async () => {
     const contact = ticket?.contact;
     if (!contact?.id) return;
     setContactFormSaving(true);
     try {
       let updateData = {};
       let extraInfo = contact.extraInfo ? [...contact.extraInfo] : [];
-      if (field === "name") {
-        updateData.name = contactFormData.name;
-      } else if (field === "email") {
-        updateData.email = contactFormData.email;
-      } else {
-        const extraFieldMap = {
-          country: "pais", city: "cidade", state: "estado",
-          leadOrigin: "origem_lead", entryDate: "data_entrada",
-          exitDate: "data_saida", dealValue: "valor_negocio",
-          company: "empresa", position: "cargo",
-          products: "produtos_interesse", observation: "observacao",
-        };
-        const extraName = extraFieldMap[field];
-        if (extraName) {
-          const value = field === "products" ? contactFormData.products.join(", ") : contactFormData[field];
-          extraInfo = setExtraInfoValueHelper(extraInfo, extraName, value);
-          updateData.extraInfo = extraInfo;
-        }
+
+      updateData.name = contactFormData.name;
+      updateData.email = contactFormData.email;
+
+      const extraFieldMap = {
+        country: "pais", city: "cidade", state: "estado",
+        leadOrigin: "origem_lead", entryDate: "data_entrada",
+        exitDate: "data_saida", dealValue: "valor_negocio",
+        company: "empresa", position: "cargo",
+        products: "produtos_interesse", observation: "observacao",
+      };
+
+      for (const [field, extraName] of Object.entries(extraFieldMap)) {
+        const value = field === "products" ? contactFormData.products.join(", ") : contactFormData[field];
+        extraInfo = setExtraInfoValueHelper(extraInfo, extraName, value);
       }
+      updateData.extraInfo = extraInfo;
+
       await api.put(`/contacts/${contact.id}`, updateData);
+      toast.success("Dados do contato salvos com sucesso!");
     } catch (err) {
-      toast.error(err?.response?.data?.message || "Erro ao salvar campo.");
+      toast.error(err?.response?.data?.message || "Erro ao salvar dados do contato.");
     }
     setContactFormSaving(false);
   };
@@ -523,13 +523,11 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
     if (!product) return;
     const newProducts = [...contactFormData.products, product];
     setContactFormData((prev) => ({ ...prev, products: newProducts, productInput: "" }));
-    setTimeout(() => handleContactSaveField("products"), 100);
   };
 
   const handleContactRemoveProduct = (index) => {
     const newProducts = contactFormData.products.filter((_, i) => i !== index);
     setContactFormData((prev) => ({ ...prev, products: newProducts }));
-    setTimeout(() => handleContactSaveField("products"), 100);
   };
 
   const resolveImageUrl = (url) => {
@@ -1092,7 +1090,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   label="Nome"
                   value={contactFormData.name}
                   onChange={(e) => handleContactFieldChange("name", e.target.value)}
-                  onBlur={() => handleContactSaveField("name")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1111,7 +1108,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   label="Email"
                   value={contactFormData.email}
                   onChange={(e) => handleContactFieldChange("email", e.target.value)}
-                  onBlur={() => handleContactSaveField("email")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1124,7 +1120,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   label="País"
                   value={contactFormData.country}
                   onChange={(e) => handleContactFieldChange("country", e.target.value)}
-                  onBlur={() => handleContactSaveField("country")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1137,7 +1132,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   label="Cidade"
                   value={contactFormData.city}
                   onChange={(e) => handleContactFieldChange("city", e.target.value)}
-                  onBlur={() => handleContactSaveField("city")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1150,7 +1144,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   label="Estado"
                   value={contactFormData.state}
                   onChange={(e) => handleContactFieldChange("state", e.target.value)}
-                  onBlur={() => handleContactSaveField("state")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1163,10 +1156,7 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   <InputLabel>Origem do lead</InputLabel>
                   <Select
                     value={contactFormData.leadOrigin}
-                    onChange={(e) => {
-                      handleContactFieldChange("leadOrigin", e.target.value);
-                      setTimeout(() => handleContactSaveField("leadOrigin"), 100);
-                    }}
+                    onChange={(e) => handleContactFieldChange("leadOrigin", e.target.value)}
                     label="Origem do lead"
                   >
                     <MenuItem value=""><em>Selecione</em></MenuItem>
@@ -1190,7 +1180,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   type="date"
                   value={contactFormData.entryDate}
                   onChange={(e) => handleContactFieldChange("entryDate", e.target.value)}
-                  onBlur={() => handleContactSaveField("entryDate")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1204,7 +1193,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   type="date"
                   value={contactFormData.exitDate}
                   onChange={(e) => handleContactFieldChange("exitDate", e.target.value)}
-                  onBlur={() => handleContactSaveField("exitDate")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1221,7 +1209,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   label="Valor do Negócio"
                   value={contactFormData.dealValue}
                   onChange={(e) => handleContactFieldChange("dealValue", e.target.value)}
-                  onBlur={() => handleContactSaveField("dealValue")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1236,7 +1223,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   label="Empresa"
                   value={contactFormData.company}
                   onChange={(e) => handleContactFieldChange("company", e.target.value)}
-                  onBlur={() => handleContactSaveField("company")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1249,7 +1235,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   label="Cargo"
                   value={contactFormData.position}
                   onChange={(e) => handleContactFieldChange("position", e.target.value)}
-                  onBlur={() => handleContactSaveField("position")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1277,13 +1262,13 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                       placeholder="Digite um produto"
                     />
                     <Button
-                      variant="contained"
+                      variant="outlined"
                       color="primary"
                       size="small"
                       onClick={handleContactAddProduct}
-                      style={{ whiteSpace: "nowrap" }}
+                      style={{ whiteSpace: "nowrap", minWidth: "auto" }}
                     >
-                      Inserir
+                      +
                     </Button>
                   </div>
                 )}
@@ -1319,7 +1304,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   className={classes.contactFieldFull}
                   value={contactFormData.observation}
                   onChange={(e) => handleContactFieldChange("observation", e.target.value)}
-                  onBlur={() => handleContactSaveField("observation")}
                   variant="outlined"
                   size="small"
                   fullWidth
@@ -1328,6 +1312,22 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   disabled={readOnly}
                   placeholder="Digite uma observação"
                 />
+
+                {/* BOTÃO SALVAR TUDO */}
+                {!readOnly && (
+                  <Button
+                    className={classes.contactFieldFull}
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    fullWidth
+                    onClick={handleSaveAllContactFields}
+                    disabled={contactFormSaving}
+                    style={{ marginTop: 4, fontWeight: 600 }}
+                  >
+                    {contactFormSaving ? "Salvando..." : "Salvar Dados do Contato"}
+                  </Button>
+                )}
               </div>
             </Paper>
 

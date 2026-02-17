@@ -38,6 +38,11 @@ import TagModal from "../../components/TagModal";
 import Add from "@material-ui/icons/Add";
 import DragIndicator from "@material-ui/icons/DragIndicator";
 import Settings from "@material-ui/icons/Settings";
+import Tooltip from "@material-ui/core/Tooltip";
+import Divider from "@material-ui/core/Divider";
+import Dashboard from "@material-ui/icons/Dashboard";
+import CreateNewFolder from "@material-ui/icons/CreateNewFolder";
+import ArrowBack from "@material-ui/icons/ArrowBack";
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -47,6 +52,124 @@ const useStyles = makeStyles((theme) => ({
     width: "100%",
     maxWidth: "1400px",
     margin: "0 auto",
+  },
+  // ===== LANDING PAGE: Seleção de Áreas =====
+  landingPage: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    padding: theme.spacing(4, 2),
+    minHeight: "70vh",
+  },
+  landingTitle: {
+    fontWeight: 700,
+    fontSize: "1.6rem",
+    marginBottom: 4,
+    color: theme.palette.text.primary,
+  },
+  landingSubtitle: {
+    color: theme.palette.text.secondary,
+    fontSize: "0.95rem",
+    marginBottom: theme.spacing(4),
+  },
+  landingGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+    gap: theme.spacing(2.5),
+    width: "100%",
+    maxWidth: 960,
+  },
+  landingCard: {
+    borderRadius: 12,
+    overflow: "hidden",
+    cursor: "pointer",
+    transition: "transform 0.2s, box-shadow 0.2s",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+    "&:hover": {
+      transform: "translateY(-4px)",
+      boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
+    },
+  },
+  landingCardHeader: {
+    height: 80,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  landingCardHeaderIcon: {
+    fontSize: 36,
+    color: "rgba(255,255,255,0.85)",
+  },
+  landingCardBody: {
+    padding: theme.spacing(2, 2.5),
+    backgroundColor: "#fff",
+  },
+  landingCardName: {
+    fontWeight: 700,
+    fontSize: "1rem",
+    marginBottom: 4,
+  },
+  landingCardMeta: {
+    fontSize: "0.78rem",
+    color: theme.palette.text.secondary,
+  },
+  landingCardDefault: {
+    fontSize: "0.65rem",
+    backgroundColor: theme.palette.primary.main,
+    color: "#fff",
+    padding: "1px 8px",
+    borderRadius: 10,
+    fontWeight: 600,
+    marginLeft: 8,
+    verticalAlign: "middle",
+  },
+  landingAddCard: {
+    borderRadius: 12,
+    border: "2px dashed",
+    borderColor: theme.palette.grey[300],
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 140,
+    cursor: "pointer",
+    transition: "all 0.2s",
+    backgroundColor: "transparent",
+    "&:hover": {
+      borderColor: theme.palette.primary.main,
+      backgroundColor: theme.palette.primary.main + "08",
+    },
+  },
+  landingAddIcon: {
+    fontSize: 40,
+    color: theme.palette.grey[400],
+    marginBottom: 8,
+  },
+  landingAddText: {
+    fontWeight: 600,
+    color: theme.palette.text.secondary,
+    fontSize: "0.9rem",
+  },
+  // ===== Barra no quadro para voltar =====
+  boardTopBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: theme.spacing(1.5),
+    marginBottom: theme.spacing(2),
+    padding: theme.spacing(1, 1.5),
+    backgroundColor: theme.palette.background.paper,
+    borderRadius: 10,
+    boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+  },
+  boardBackBtn: {
+    textTransform: "none",
+    fontWeight: 600,
+    fontSize: "0.85rem",
+  },
+  boardCurrentName: {
+    fontWeight: 700,
+    fontSize: "1rem",
+    flex: 1,
   },
   header: {
     display: "flex",
@@ -382,6 +505,10 @@ const Kanban = () => {
   const [newStatusLabel, setNewStatusLabel] = useState("");
   const [newStatusColor, setNewStatusColor] = useState("#1976d2");
   const [editingStatusIdx, setEditingStatusIdx] = useState(null);
+  const [wsManagerOpen, setWsManagerOpen] = useState(false);
+  const [newWsName, setNewWsName] = useState("");
+  const [editingWsId, setEditingWsId] = useState(null);
+  const [editingWsName, setEditingWsName] = useState("");
 
   const queueIds = user.queues.map((q) => q.UserQueue.queueId);
 
@@ -410,32 +537,25 @@ const Kanban = () => {
     fetchTags();
   }, [user]);
 
+  const loadQuadroGroups = async () => {
+    try {
+      const { data } = await api.get("/quadro-groups");
+      const list = data.groups || data.lista || data || [];
+      const groups = Array.isArray(list) && list.length > 0
+        ? list
+        : [{ id: 1, name: "Kanban", isDefault: true }];
+      setQuadroGroups(groups);
+    } catch (err) {
+      const fallback = [{ id: 1, name: "Kanban", isDefault: true }];
+      setQuadroGroups(fallback);
+    }
+  };
+
   useEffect(() => {
-    const loadQuadroGroups = async () => {
-      try {
-        const { data } = await api.get("/quadro-groups");
-        const list = data.groups || data.lista || data || [];
-        setQuadroGroups(Array.isArray(list) ? list : []);
-        if (list.length > 0 && selectedQuadroGroupId == null) {
-          setSelectedQuadroGroupId(String(list[0].id));
-        }
-      } catch (err) {
-        setQuadroGroups([
-          { id: 1, name: "Produção" },
-          { id: 2, name: "Financeiro" },
-          { id: 3, name: "Designer" },
-        ]);
-        if (selectedQuadroGroupId == null) setSelectedQuadroGroupId("1");
-      }
-    };
     loadQuadroGroups();
   }, []);
 
-  useEffect(() => {
-    if (quadroGroups.length > 0 && selectedQuadroGroupId == null) {
-      setSelectedQuadroGroupId(String(quadroGroups[0].id));
-    }
-  }, [quadroGroups]);
+  // Não auto-selecionar: landing page mostra todas as áreas
 
   const fetchTags = async () => {
     try {
@@ -533,6 +653,76 @@ const Kanban = () => {
   const handleCancelEditName = () => {
     setEditingNameTicketId(null);
     setEditingNameValue("");
+  };
+
+  // ===== CRUD de Áreas de Trabalho =====
+  const handleCreateWorkspace = async () => {
+    const name = newWsName.trim();
+    if (!name) return;
+    if (quadroGroups.some((g) => g.name.toLowerCase() === name.toLowerCase())) {
+      toast.warn("Já existe uma área com esse nome.");
+      return;
+    }
+    try {
+      const { data } = await api.post("/quadro-groups", { name });
+      const newGroup = data.group || data;
+      toast.success(`Área "${name}" criada.`);
+      setNewWsName("");
+      await loadQuadroGroups();
+      if (newGroup?.id) setSelectedQuadroGroupId(String(newGroup.id));
+    } catch (err) {
+      // Fallback: adicionar localmente com ID gerado
+      const newId = Math.max(0, ...quadroGroups.map((g) => Number(g.id) || 0)) + 1;
+      const newGroup = { id: newId, name };
+      setQuadroGroups((prev) => [...prev, newGroup]);
+      setSelectedQuadroGroupId(String(newId));
+      toast.success(`Área "${name}" criada (local).`);
+      setNewWsName("");
+    }
+  };
+
+  const handleRenameWorkspace = async () => {
+    const name = editingWsName.trim();
+    if (!name || !editingWsId) return;
+    try {
+      await api.put(`/quadro-groups/${editingWsId}`, { name });
+      toast.success("Área renomeada.");
+      await loadQuadroGroups();
+    } catch (err) {
+      // Fallback local
+      setQuadroGroups((prev) =>
+        prev.map((g) => (String(g.id) === String(editingWsId) ? { ...g, name } : g))
+      );
+      toast.success("Área renomeada (local).");
+    }
+    setEditingWsId(null);
+    setEditingWsName("");
+  };
+
+  const handleDeleteWorkspace = async (groupId) => {
+    const group = quadroGroups.find((g) => String(g.id) === String(groupId));
+    if (!group) return;
+    if (group.isDefault) {
+      toast.warn("Não é possível excluir a área padrão.");
+      return;
+    }
+    if (quadroGroups.length <= 1) {
+      toast.warn("É necessário ter pelo menos uma área.");
+      return;
+    }
+    if (!window.confirm(`Excluir a área "${group.name}"? Os cards dessa área não serão apagados.`)) return;
+    try {
+      await api.delete(`/quadro-groups/${groupId}`);
+      toast.success("Área excluída.");
+      await loadQuadroGroups();
+    } catch (err) {
+      setQuadroGroups((prev) => prev.filter((g) => String(g.id) !== String(groupId)));
+      toast.success("Área excluída (local).");
+    }
+    if (String(selectedQuadroGroupId) === String(groupId)) {
+      const remaining = quadroGroups.filter((g) => String(g.id) !== String(groupId));
+      if (remaining.length > 0) setSelectedQuadroGroupId(String(remaining[0].id));
+    }
   };
 
   const saveStatuses = async (newList) => {
@@ -872,24 +1062,154 @@ const Kanban = () => {
 
   const otherGroups = quadroGroups.filter((g) => String(g.id) !== String(selectedQuadroGroupId));
 
+  const BOARD_COLORS = ["#1976d2", "#2e7d32", "#ed6c02", "#9c27b0", "#d32f2f", "#00838f", "#e91e63", "#ff6f00", "#5c6bc0", "#00897b"];
+
+  // ===== LANDING PAGE: Nenhuma área selecionada =====
+  if (selectedQuadroGroupId == null) {
+    return (
+      <div className={classes.root}>
+        <div className={classes.landingPage}>
+          <Typography className={classes.landingTitle}>
+            Áreas de Trabalho
+          </Typography>
+          <Typography className={classes.landingSubtitle}>
+            Selecione uma área para acessar o quadro
+          </Typography>
+
+          <div className={classes.landingGrid}>
+            {quadroGroups.map((g, idx) => {
+              const bgColor = BOARD_COLORS[idx % BOARD_COLORS.length];
+              return (
+                <Paper
+                  key={g.id}
+                  className={classes.landingCard}
+                  elevation={0}
+                  onClick={() => setSelectedQuadroGroupId(String(g.id))}
+                >
+                  <div
+                    className={classes.landingCardHeader}
+                    style={{ backgroundColor: bgColor }}
+                  >
+                    <Dashboard className={classes.landingCardHeaderIcon} />
+                  </div>
+                  <div className={classes.landingCardBody}>
+                    <Typography className={classes.landingCardName}>
+                      {g.name}
+                      {g.isDefault && (
+                        <span className={classes.landingCardDefault}>PADRÃO</span>
+                      )}
+                    </Typography>
+                    <Typography className={classes.landingCardMeta}>
+                      Clique para acessar
+                    </Typography>
+                  </div>
+                </Paper>
+              );
+            })}
+
+            {/* Card para criar nova área */}
+            <div
+              className={classes.landingAddCard}
+              onClick={() => setWsManagerOpen(true)}
+            >
+              <CreateNewFolder className={classes.landingAddIcon} />
+              <Typography className={classes.landingAddText}>
+                Criar nova área
+              </Typography>
+            </div>
+          </div>
+        </div>
+
+        {/* Dialog de gerenciamento (reutilizado) */}
+        <Dialog
+          open={wsManagerOpen}
+          onClose={() => { setWsManagerOpen(false); setEditingWsId(null); setNewWsName(""); }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Dashboard fontSize="small" />
+              Criar Área de Trabalho
+            </div>
+          </DialogTitle>
+          <DialogContent dividers>
+            <Typography variant="body2" color="textSecondary" style={{ marginBottom: 16 }}>
+              Cada área funciona como um espaço isolado com colunas e cards independentes.
+            </Typography>
+            <div style={{ display: "flex", gap: 8 }}>
+              <TextField
+                size="small"
+                variant="outlined"
+                label="Nome da área"
+                placeholder="Ex.: Ordem de Serviço, Orçamento..."
+                value={newWsName}
+                onChange={(e) => setNewWsName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreateWorkspace(); }}
+                style={{ flex: 1 }}
+                autoFocus
+              />
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<CreateNewFolder />}
+                onClick={handleCreateWorkspace}
+                disabled={!newWsName.trim()}
+              >
+                Criar
+              </Button>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { setWsManagerOpen(false); setNewWsName(""); }}>
+              Fechar
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </div>
+    );
+  }
+
+  // ===== QUADRO KANBAN (área selecionada) =====
   return (
     <div className={classes.root}>
+      {/* BARRA SUPERIOR DO QUADRO */}
+      <div className={classes.boardTopBar}>
+        <Button
+          startIcon={<ArrowBack />}
+          onClick={() => setSelectedQuadroGroupId(null)}
+          className={classes.boardBackBtn}
+          size="small"
+        >
+          Áreas
+        </Button>
+        <Divider orientation="vertical" flexItem />
+        <Typography className={classes.boardCurrentName}>
+          {quadroGroups.find((g) => String(g.id) === String(selectedQuadroGroupId))?.name || "Quadro"}
+        </Typography>
+        {quadroGroups.map((g) => {
+          const isActive = String(g.id) === String(selectedQuadroGroupId);
+          return (
+            <Chip
+              key={g.id}
+              label={g.name}
+              size="small"
+              color={isActive ? "primary" : "default"}
+              variant={isActive ? "default" : "outlined"}
+              onClick={() => setSelectedQuadroGroupId(String(g.id))}
+              style={{ fontWeight: isActive ? 700 : 400, cursor: "pointer" }}
+            />
+          );
+        })}
+        <Tooltip title="Gerenciar áreas">
+          <IconButton size="small" onClick={() => setWsManagerOpen(true)}>
+            <Settings fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </div>
+
       <header className={classes.header}>
         <div className={classes.filters}>
-          {quadroGroups.length > 0 && (
-            <FormControl variant="outlined" size="small" className={classes.dateInput}>
-              <InputLabel>Área</InputLabel>
-              <Select
-                value={selectedQuadroGroupId ?? ""}
-                onChange={(e) => setSelectedQuadroGroupId(e.target.value)}
-                label="Área"
-              >
-                {quadroGroups.map((g) => (
-                  <MenuItem key={g.id} value={String(g.id)}>{g.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
           <TextField
             label="Data de início"
             type="date"
@@ -1280,6 +1600,133 @@ const Kanban = () => {
           <Button onClick={handleCloseShareModal}>Cancelar</Button>
           <Button onClick={handleShareSave} color="primary" variant="contained" disabled={shareModalSaving}>
             {shareModalSaving ? "Salvando…" : "Salvar"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Gerenciador de Áreas de Trabalho */}
+      <Dialog
+        open={wsManagerOpen}
+        onClose={() => { setWsManagerOpen(false); setEditingWsId(null); setNewWsName(""); }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Dashboard fontSize="small" />
+            Áreas de Trabalho
+          </div>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="textSecondary" style={{ marginBottom: 16 }}>
+            Cada área de trabalho funciona como um espaço isolado com colunas e cards independentes. Crie áreas para organizar projetos, processos ou equipes separadamente.
+          </Typography>
+
+          {/* Lista de áreas existentes */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+            {quadroGroups.map((g) => (
+              <Paper
+                key={g.id}
+                variant="outlined"
+                style={{
+                  padding: "12px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderLeftWidth: 4,
+                  borderLeftColor: String(g.id) === String(selectedQuadroGroupId) ? "#1976d2" : "#e0e0e0",
+                  backgroundColor: String(g.id) === String(selectedQuadroGroupId) ? "#f0f7ff" : undefined,
+                }}
+              >
+                <Dashboard style={{ fontSize: 20, color: String(g.id) === String(selectedQuadroGroupId) ? "#1976d2" : "#999" }} />
+                {editingWsId === String(g.id) ? (
+                  <TextField
+                    size="small"
+                    variant="outlined"
+                    value={editingWsName}
+                    onChange={(e) => setEditingWsName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleRenameWorkspace(); if (e.key === "Escape") { setEditingWsId(null); setEditingWsName(""); } }}
+                    autoFocus
+                    style={{ flex: 1 }}
+                  />
+                ) : (
+                  <Typography variant="body1" style={{ flex: 1, fontWeight: 500 }}>
+                    {g.name}
+                    {g.isDefault && (
+                      <Typography variant="caption" color="textSecondary" component="span" style={{ marginLeft: 8 }}>
+                        (padrão)
+                      </Typography>
+                    )}
+                  </Typography>
+                )}
+                {editingWsId === String(g.id) ? (
+                  <>
+                    <Button size="small" variant="contained" color="primary" onClick={handleRenameWorkspace}>
+                      Salvar
+                    </Button>
+                    <Button size="small" onClick={() => { setEditingWsId(null); setEditingWsName(""); }}>
+                      Cancelar
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Tooltip title="Renomear">
+                      <IconButton size="small" onClick={() => { setEditingWsId(String(g.id)); setEditingWsName(g.name); }}>
+                        <Edit style={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Tooltip>
+                    {!g.isDefault && (
+                      <Tooltip title="Excluir área">
+                        <IconButton size="small" onClick={() => handleDeleteWorkspace(g.id)} style={{ color: "#d32f2f" }}>
+                          <Delete style={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    <Button
+                      size="small"
+                      variant={String(g.id) === String(selectedQuadroGroupId) ? "contained" : "outlined"}
+                      color="primary"
+                      onClick={() => { setSelectedQuadroGroupId(String(g.id)); setWsManagerOpen(false); }}
+                    >
+                      {String(g.id) === String(selectedQuadroGroupId) ? "Ativa" : "Acessar"}
+                    </Button>
+                  </>
+                )}
+              </Paper>
+            ))}
+          </div>
+
+          <Divider style={{ marginBottom: 16 }} />
+
+          {/* Criar nova área */}
+          <Typography variant="subtitle2" style={{ marginBottom: 8 }}>
+            Criar nova área de trabalho
+          </Typography>
+          <div style={{ display: "flex", gap: 8 }}>
+            <TextField
+              size="small"
+              variant="outlined"
+              label="Nome da área"
+              placeholder="Ex.: Ordem de Serviço, Orçamento..."
+              value={newWsName}
+              onChange={(e) => setNewWsName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreateWorkspace(); }}
+              style={{ flex: 1 }}
+            />
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<CreateNewFolder />}
+              onClick={handleCreateWorkspace}
+              disabled={!newWsName.trim()}
+            >
+              Criar
+            </Button>
+          </div>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setWsManagerOpen(false); setEditingWsId(null); setNewWsName(""); }}>
+            Fechar
           </Button>
         </DialogActions>
       </Dialog>
