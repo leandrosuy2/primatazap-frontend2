@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useHistory } from "react-router-dom";
 import { has, isArray } from "lodash";
 
@@ -16,47 +16,59 @@ const useAuth = () => {
   const [isAuth, setIsAuth] = useState(false);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState({});
-  const [socket, setSocket] = useState({})
- 
+  const [socket, setSocket] = useState({});
 
-  api.interceptors.request.use(
-    (config) => {
-      const token = localStorage.getItem("token");
-      if (token) {
-        config.headers["Authorization"] = `Bearer ${JSON.parse(token)}`;
-        setIsAuth(true);
-      }
-      return config;
-    },
-    (error) => {
-      Promise.reject(error);
-    }
-  );
+  const userRef = useRef(user);
+  userRef.current = user;
 
-  api.interceptors.response.use(
-    (response) => {
-      return response;
-    },
-    async (error) => {
-      const originalRequest = error.config;
-      if (error?.response?.status === 403 && !originalRequest._retry) {
-        originalRequest._retry = true;
+  const socketRef = useRef(socket);
+  socketRef.current = socket;
 
-        const { data } = await api.post("/auth/refresh_token");
-        if (data) {
-          localStorage.setItem("token", JSON.stringify(data.token));
-          api.defaults.headers.Authorization = `Bearer ${data.token}`;
+  useEffect(() => {
+    const reqInterceptor = api.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem("token");
+        if (token) {
+          config.headers["Authorization"] = `Bearer ${JSON.parse(token)}`;
+          setIsAuth(true);
         }
-        return api(originalRequest);
+        return config;
+      },
+      (error) => {
+        Promise.reject(error);
       }
-      if (error?.response?.status === 401) {
-        localStorage.removeItem("token");
-        api.defaults.headers.Authorization = undefined;
-        setIsAuth(false);
+    );
+
+    const resInterceptor = api.interceptors.response.use(
+      (response) => {
+        return response;
+      },
+      async (error) => {
+        const originalRequest = error.config;
+        if (error?.response?.status === 403 && !originalRequest._retry) {
+          originalRequest._retry = true;
+
+          const { data } = await api.post("/auth/refresh_token");
+          if (data) {
+            localStorage.setItem("token", JSON.stringify(data.token));
+            api.defaults.headers.Authorization = `Bearer ${data.token}`;
+          }
+          return api(originalRequest);
+        }
+        if (error?.response?.status === 401) {
+          localStorage.removeItem("token");
+          api.defaults.headers.Authorization = undefined;
+          setIsAuth(false);
+        }
+        return Promise.reject(error);
       }
-      return Promise.reject(error);
-    }
-  );
+    );
+
+    return () => {
+      api.interceptors.request.eject(reqInterceptor);
+      api.interceptors.response.eject(resInterceptor);
+    };
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -77,28 +89,31 @@ const useAuth = () => {
 
   useEffect(() => {
     if (Object.keys(user).length && user.id > 0) {
-      // console.log("Entrou useWhatsapp com user", Object.keys(user).length, Object.keys(socket).length ,user, socket)
       let io;
-      if (!Object.keys(socket).length) {
+      if (!Object.keys(socketRef.current).length) {
         io = socketConnection({ user });
-        setSocket(io)
+        setSocket(io);
       } else {
-        io = socket
+        io = socketRef.current;
       }
-      io.on(`company-${user.companyId}-user`, (data) => {
-        if (data.action === "update" && data.user.id === user.id) {
+
+      const companyId = user.companyId;
+      const userId = user.id;
+
+      const onUserUpdate = (data) => {
+        if (data.action === "update" && data.user.id === userId) {
           setUser(data.user);
         }
-      });
+      };
+
+      io.on(`company-${companyId}-user`, onUserUpdate);
 
       return () => {
-        // console.log("desconectou o company user ", user.id)
-        io.off(`company-${user.companyId}-user`);
-        // io.disconnect();
+        io.off(`company-${companyId}-user`, onUserUpdate);
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id, user.companyId]);
 
   const handleLogin = async (userData) => {
     setLoading(true);
@@ -206,7 +221,6 @@ Entre em contato com o Suporte para mais informações! `);
   const getCurrentUserInfo = async () => {
     try {
       const { data } = await api.get("/auth/me");
-      console.log(data)
       return data;
     } catch (_) {
       return null;

@@ -37,6 +37,7 @@ import NewTicketModal from "../../components/NewTicketModal";
 import TagModal from "../../components/TagModal";
 import Add from "@material-ui/icons/Add";
 import DragIndicator from "@material-ui/icons/DragIndicator";
+import Settings from "@material-ui/icons/Settings";
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -179,10 +180,6 @@ const useStyles = makeStyles((theme) => ({
     fontSize: "0.85rem",
     flexShrink: 0,
   },
-  cardHeaderText: {
-    flex: 1,
-    minWidth: 0,
-  },
   cardClientName: {
     fontSize: "0.875rem",
     fontWeight: 600,
@@ -256,6 +253,31 @@ const useStyles = makeStyles((theme) => ({
       backgroundColor: "rgba(0,0,0,0.06)",
     },
   },
+  cardEditNameBtn: {
+    padding: 2,
+    marginLeft: 4,
+    color: theme.palette.text.secondary,
+    opacity: 0,
+    transition: "opacity 0.15s",
+  },
+  cardHeaderText: {
+    flex: 1,
+    minWidth: 0,
+    "&:hover $cardEditNameBtn": {
+      opacity: 1,
+    },
+  },
+  inlineNameInput: {
+    fontSize: "0.875rem",
+    fontWeight: 600,
+    padding: "2px 4px",
+    border: "1px solid",
+    borderColor: theme.palette.primary.main,
+    borderRadius: 4,
+    outline: "none",
+    width: "100%",
+    fontFamily: "inherit",
+  },
 }));
 
 const LANE_EM_ABERTO = "lane0";
@@ -300,13 +322,31 @@ const getCardImageUrl = (ticket) => {
   return getContactImageUrl(ticket?.contact);
 };
 
-// Cores do badge por status: vermelho=urgente, laranja=produção, verde=entregue
-function getStatusBadgeColor(laneId, laneTitle, headerColor) {
+const LS_KEY = "kanban_custom_statuses";
+
+function loadStatusesFromStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function getStatusBadgeColor(laneId, laneTitle, headerColor, statusList) {
   if (laneId === LANE_EM_ABERTO) return "#6c757d";
   const t = (laneTitle || "").toLowerCase();
+  if (statusList && statusList.length > 0) {
+    const match = statusList.find(
+      (s) => s.label?.toLowerCase() === t || s.value?.toLowerCase() === t
+    );
+    if (match?.color) return match.color;
+  }
   if (t.includes("entregue") || t.includes("concluido") || t.includes("concluídos")) return "#2e7d32";
   if (t.includes("produção") || t.includes("producao") || t.includes("criação") || t.includes("criacao")) return "#ed6c02";
-  return "#d32f2f"; // urgente/problema
+  return headerColor || "#d32f2f";
 }
 
 const Kanban = () => {
@@ -335,8 +375,36 @@ const Kanban = () => {
   const [shareModalTicket, setShareModalTicket] = useState(null);
   const [shareModalSelectedIds, setShareModalSelectedIds] = useState([]);
   const [shareModalSaving, setShareModalSaving] = useState(false);
+  const [editingNameTicketId, setEditingNameTicketId] = useState(null);
+  const [editingNameValue, setEditingNameValue] = useState("");
+  const [customStatuses, setCustomStatuses] = useState([]);
+  const [statusManagerOpen, setStatusManagerOpen] = useState(false);
+  const [newStatusLabel, setNewStatusLabel] = useState("");
+  const [newStatusColor, setNewStatusColor] = useState("#1976d2");
+  const [editingStatusIdx, setEditingStatusIdx] = useState(null);
 
   const queueIds = user.queues.map((q) => q.UserQueue.queueId);
+
+  // Carregar status personalizados
+  useEffect(() => {
+    const loadStatuses = async () => {
+      try {
+        const { data } = await api.get("/quadro-statuses");
+        const list = data.statuses || data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setCustomStatuses(list.map((s) => ({
+            value: s.value || s.label?.toLowerCase().replace(/\s+/g, "_") || "",
+            label: s.label || s.name || "",
+            color: s.color || "#1976d2",
+          })));
+          return;
+        }
+      } catch (err) {}
+      const stored = loadStatusesFromStorage();
+      if (stored) setCustomStatuses(stored);
+    };
+    loadStatuses();
+  }, []);
 
   useEffect(() => {
     fetchTags();
@@ -430,6 +498,99 @@ const Kanban = () => {
   useEffect(() => {
     if (selectedQuadroGroupId != null && tags.length >= 0) fetchTickets();
   }, [selectedQuadroGroupId]);
+
+  const handleStartEditName = (e, ticket) => {
+    e.stopPropagation();
+    setEditingNameTicketId(ticket.id);
+    setEditingNameValue(ticket.contact?.name || "");
+  };
+
+  const handleSaveEditName = async (ticketId) => {
+    const trimmed = editingNameValue.trim();
+    if (!trimmed) {
+      setEditingNameTicketId(null);
+      return;
+    }
+    try {
+      const ticket = tickets.find((t) => t.id === ticketId);
+      if (ticket?.contact?.id) {
+        await api.put(`/contacts/${ticket.contact.id}`, { name: trimmed });
+        setTickets((prev) =>
+          prev.map((t) =>
+            t.id === ticketId
+              ? { ...t, contact: { ...t.contact, name: trimmed } }
+              : t
+          )
+        );
+        toast.success("Nome atualizado.");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Erro ao salvar nome.");
+    }
+    setEditingNameTicketId(null);
+  };
+
+  const handleCancelEditName = () => {
+    setEditingNameTicketId(null);
+    setEditingNameValue("");
+  };
+
+  const saveStatuses = async (newList) => {
+    setCustomStatuses(newList);
+    try { localStorage.setItem(LS_KEY, JSON.stringify(newList)); } catch (e) {}
+    try { await api.put("/quadro-statuses", { statuses: newList }); } catch (e) {}
+  };
+
+  const handleAddStatus = () => {
+    const label = newStatusLabel.trim();
+    if (!label) return;
+    const value = label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    if (customStatuses.some((s) => s.value === value)) {
+      toast.warn("Já existe um status com esse nome.");
+      return;
+    }
+    saveStatuses([...customStatuses, { value, label, color: newStatusColor }]);
+    setNewStatusLabel("");
+    setNewStatusColor("#1976d2");
+    toast.success(`Status "${label}" criado.`);
+  };
+
+  const handleUpdateStatus = (index) => {
+    const label = newStatusLabel.trim();
+    if (!label) return;
+    const value = label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    saveStatuses(customStatuses.map((s, i) =>
+      i === index ? { value, label, color: newStatusColor } : s
+    ));
+    setEditingStatusIdx(null);
+    setNewStatusLabel("");
+    setNewStatusColor("#1976d2");
+    toast.success("Status atualizado.");
+  };
+
+  const handleDeleteStatus = (index) => {
+    const s = customStatuses[index];
+    if (!window.confirm(`Excluir o status "${s.label}"?`)) return;
+    const updated = customStatuses.filter((_, i) => i !== index);
+    if (updated.length === 0) {
+      toast.warn("É necessário ter pelo menos um status.");
+      return;
+    }
+    saveStatuses(updated);
+    toast.success("Status removido.");
+  };
+
+  const handleEditStatusStart = (index) => {
+    setEditingStatusIdx(index);
+    setNewStatusLabel(customStatuses[index].label);
+    setNewStatusColor(customStatuses[index].color);
+  };
+
+  const handleCancelEditStatus = () => {
+    setEditingStatusIdx(null);
+    setNewStatusLabel("");
+    setNewStatusColor("#1976d2");
+  };
 
   const handleSearchClick = () => fetchTickets();
 
@@ -760,20 +921,31 @@ const Kanban = () => {
             BUSCAR
           </Button>
         </div>
-        <Can
-          role={user.profile}
-          perform="dashboard:view"
-          yes={() => (
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleAddColunas}
-              className={classes.btnAdicionar}
-            >
-              + ADICIONAR COLUNAS
-            </Button>
-          )}
-        />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<Settings />}
+            onClick={() => setStatusManagerOpen(true)}
+            style={{ textTransform: "none", fontWeight: 600 }}
+          >
+            Gerenciar Status
+          </Button>
+          <Can
+            role={user.profile}
+            perform="dashboard:view"
+            yes={() => (
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleAddColunas}
+                className={classes.btnAdicionar}
+              >
+                + ADICIONAR COLUNAS
+              </Button>
+            )}
+          />
+        </div>
       </header>
 
       <div
@@ -908,9 +1080,36 @@ const Kanban = () => {
                           {ticket.nomeProjeto || ticket.nomeEmpresa || ticket.quadroNomeProjeto}
                         </Typography>
                       )}
-                      <Typography className={classes.cardClientName} title={ticket.contact?.name}>
-                        {ticket.contact?.name || "-"}
-                      </Typography>
+                      {editingNameTicketId === ticket.id ? (
+                        <input
+                          className={classes.inlineNameInput}
+                          value={editingNameValue}
+                          onChange={(e) => setEditingNameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveEditName(ticket.id);
+                            if (e.key === "Escape") handleCancelEditName();
+                          }}
+                          onBlur={() => handleSaveEditName(ticket.id)}
+                          autoFocus
+                          data-no-drag
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          <Typography className={classes.cardClientName} title={ticket.contact?.name}>
+                            {ticket.contact?.name || "-"}
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            className={classes.cardEditNameBtn}
+                            onClick={(e) => handleStartEditName(e, ticket)}
+                            title="Editar nome"
+                            data-no-drag
+                          >
+                            <Edit style={{ fontSize: 14 }} />
+                          </IconButton>
+                        </div>
+                      )}
                       {ticket.whatsapp?.name && (
                         <Typography className={classes.cardConnection} title={ticket.whatsapp.name}>
                           {ticket.whatsapp.name}
@@ -923,7 +1122,7 @@ const Kanban = () => {
                         label={lane.statusLabel}
                         className={classes.cardStatus}
                         style={{
-                          backgroundColor: getStatusBadgeColor(lane.id, lane.title, lane.headerColor),
+                          backgroundColor: getStatusBadgeColor(lane.id, lane.title, lane.headerColor, customStatuses),
                           color: "#fff",
                         }}
                       />
@@ -1081,6 +1280,171 @@ const Kanban = () => {
           <Button onClick={handleCloseShareModal}>Cancelar</Button>
           <Button onClick={handleShareSave} color="primary" variant="contained" disabled={shareModalSaving}>
             {shareModalSaving ? "Salvando…" : "Salvar"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Gerenciador de Status Personalizados */}
+      <Dialog
+        open={statusManagerOpen}
+        onClose={() => { setStatusManagerOpen(false); handleCancelEditStatus(); }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Settings fontSize="small" />
+            Gerenciar Status Personalizados
+          </div>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="textSecondary" style={{ marginBottom: 16 }}>
+            Crie, edite ou remova status para adaptar o quadro ao seu processo de trabalho.
+          </Typography>
+
+          {customStatuses.length === 0 && (
+            <Paper variant="outlined" style={{ padding: 16, marginBottom: 16, textAlign: "center" }}>
+              <Typography variant="body2" color="textSecondary">
+                Nenhum status personalizado criado ainda. Os status padrão estão sendo usados (Entregue, Em produção, Aguardando, Cancelado).
+              </Typography>
+            </Paper>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+            {customStatuses.map((s, idx) => (
+              <Paper
+                key={s.value + idx}
+                variant="outlined"
+                style={{
+                  padding: "10px 14px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  borderLeftWidth: 4,
+                  borderLeftColor: s.color,
+                }}
+              >
+                <div
+                  style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: "50%",
+                    backgroundColor: s.color,
+                    flexShrink: 0,
+                  }}
+                />
+                <Typography variant="body2" style={{ flex: 1, fontWeight: 500 }}>
+                  {s.label}
+                </Typography>
+                <Typography variant="caption" color="textSecondary" style={{ marginRight: 8 }}>
+                  {s.value}
+                </Typography>
+                <IconButton size="small" onClick={() => handleEditStatusStart(idx)} title="Editar">
+                  <Edit style={{ fontSize: 16 }} />
+                </IconButton>
+                <IconButton size="small" onClick={() => handleDeleteStatus(idx)} title="Excluir" style={{ color: "#d32f2f" }}>
+                  <Delete style={{ fontSize: 16 }} />
+                </IconButton>
+              </Paper>
+            ))}
+          </div>
+
+          <Paper
+            variant="outlined"
+            style={{
+              padding: 16,
+              backgroundColor: editingStatusIdx !== null ? "#fff3e0" : "#f5f5f5",
+              borderRadius: 8,
+            }}
+          >
+            <Typography variant="subtitle2" style={{ marginBottom: 10 }}>
+              {editingStatusIdx !== null ? "Editar status" : "Adicionar novo status"}
+            </Typography>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <TextField
+                size="small"
+                variant="outlined"
+                label="Nome do status"
+                placeholder="Ex.: Em revisão"
+                value={newStatusLabel}
+                onChange={(e) => setNewStatusLabel(e.target.value)}
+                style={{ flex: 1, minWidth: 180 }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    editingStatusIdx !== null
+                      ? handleUpdateStatus(editingStatusIdx)
+                      : handleAddStatus();
+                  }
+                }}
+              />
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Typography variant="caption" color="textSecondary">Cor:</Typography>
+                <input
+                  type="color"
+                  value={newStatusColor}
+                  onChange={(e) => setNewStatusColor(e.target.value)}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    padding: 2,
+                  }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: 4 }}>
+                {["#2e7d32", "#ed6c02", "#1976d2", "#757575", "#d32f2f", "#9c27b0", "#00838f", "#e91e63"].map((c) => (
+                  <div
+                    key={c}
+                    onClick={() => setNewStatusColor(c)}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: "50%",
+                      backgroundColor: c,
+                      cursor: "pointer",
+                      border: newStatusColor === c ? "2px solid #000" : "2px solid transparent",
+                      transition: "border 0.15s",
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              {editingStatusIdx !== null ? (
+                <>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    onClick={() => handleUpdateStatus(editingStatusIdx)}
+                    disabled={!newStatusLabel.trim()}
+                  >
+                    Salvar alteração
+                  </Button>
+                  <Button size="small" onClick={handleCancelEditStatus}>
+                    Cancelar
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
+                  startIcon={<Add />}
+                  onClick={handleAddStatus}
+                  disabled={!newStatusLabel.trim()}
+                >
+                  Adicionar status
+                </Button>
+              )}
+            </div>
+          </Paper>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setStatusManagerOpen(false); handleCancelEditStatus(); }}>
+            Fechar
           </Button>
         </DialogActions>
       </Dialog>

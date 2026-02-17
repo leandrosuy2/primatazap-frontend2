@@ -32,6 +32,14 @@ import AttachFile from "@material-ui/icons/AttachFile";
 import Delete from "@material-ui/icons/Delete";
 import Share from "@material-ui/icons/Share";
 import History from "@material-ui/icons/History";
+import Settings from "@material-ui/icons/Settings";
+import FiberManualRecord from "@material-ui/icons/FiberManualRecord";
+import {
+  Dialog as StatusDialog,
+  DialogTitle as StatusDialogTitle,
+  DialogContent as StatusDialogContent,
+  DialogActions as StatusDialogActions,
+} from "@material-ui/core";
 import api from "../../services/api";
 import { format, parseISO } from "date-fns";
 import { AuthContext } from "../../context/Auth/AuthContext";
@@ -140,105 +148,59 @@ const useStyles = makeStyles((theme) => ({
     color: "#fff",
   },
   logsSection: {
-    padding: theme.spacing(2),
+    padding: theme.spacing(1.5),
     marginTop: theme.spacing(2),
   },
-  timeline: {
-    position: "relative",
-    paddingLeft: 28,
-    "&::before": {
-      content: '""',
-      position: "absolute",
-      left: 7,
-      top: 8,
-      bottom: 8,
-      width: 2,
-      background: `linear-gradient(to bottom, ${theme.palette.primary.main}, ${theme.palette.primary.light})`,
-      borderRadius: 1,
-      transformOrigin: "top",
-      animation: "$timelineLineDraw 0.6s ease-out forwards",
-    },
+  logsHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    cursor: "pointer",
+    userSelect: "none",
+    "&:hover": { opacity: 0.85 },
   },
-  timelineRunner: {
-    position: "absolute",
-    left: 2,
-    width: 12,
-    height: 12,
-    borderRadius: "50%",
-    background: `radial-gradient(circle at 30% 30%, #fff, ${theme.palette.primary.light})`,
-    boxShadow: "0 0 14px rgba(25, 118, 210, 0.9), 0 0 6px rgba(255,255,255,0.8)",
-    transition: "top 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
-    pointerEvents: "none",
-    zIndex: 1,
+  logsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    marginTop: theme.spacing(1),
+    maxHeight: 200,
+    overflowY: "auto",
+    ...theme.scrollbarStyles,
   },
-  timelineItem: {
-    position: "relative",
-    marginBottom: theme.spacing(1.5),
-    opacity: 0,
-    animation: "$timelineSlideIn 0.45s ease-out forwards",
-    "&:last-child": { marginBottom: 0 },
-  },
-  timelineDot: {
-    position: "absolute",
-    left: -28,
-    top: 10,
-    width: 16,
-    height: 16,
-    borderRadius: "50%",
-    border: "3px solid",
-    borderColor: theme.palette.background.paper,
-    boxShadow: theme.shadows[2],
-    animation: "$timelineDotPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, $timelineDotPulse 2.5s ease-in-out infinite 0.5s",
-  },
-  timelineCard: {
-    padding: theme.spacing(1.5, 2),
-    borderRadius: 12,
+  logRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "6px 10px",
+    borderRadius: 6,
     backgroundColor: theme.palette.grey[50],
     border: "1px solid",
     borderColor: theme.palette.divider,
-    borderLeftWidth: 3,
-    transition: "box-shadow 0.25s ease, transform 0.25s ease",
-    "&:hover": {
-      boxShadow: theme.shadows[3],
-      transform: "translateX(6px)",
-    },
+    fontSize: "0.78rem",
+    flexWrap: "wrap",
   },
-  timelineTime: {
-    fontSize: "0.75rem",
+  logDot: {
+    width: 10,
+    height: 10,
+    borderRadius: "50%",
+    flexShrink: 0,
+  },
+  logTime: {
     fontWeight: 600,
-    marginBottom: 4,
-    letterSpacing: "0.02em",
-  },
-  timelineLabel: {
-    fontSize: "0.9rem",
-    color: theme.palette.text.primary,
-    "& span": {
-      color: theme.palette.text.secondary,
-      fontWeight: 500,
-    },
-  },
-  timelineUser: {
-    fontSize: "0.75rem",
     color: theme.palette.text.secondary,
-    marginTop: 6,
+    fontSize: "0.72rem",
+    minWidth: 110,
+  },
+  logLabel: {
+    flex: 1,
+    color: theme.palette.text.primary,
+    "& span": { color: theme.palette.text.secondary },
+  },
+  logUser: {
+    fontSize: "0.7rem",
+    color: theme.palette.text.secondary,
     fontStyle: "italic",
-  },
-  "@keyframes timelineLineDraw": {
-    "0%": { transform: "scaleY(0)" },
-    "100%": { transform: "scaleY(1)" },
-  },
-  "@keyframes timelineSlideIn": {
-    "0%": { opacity: 0, transform: "translateX(-24px)" },
-    "100%": { opacity: 1, transform: "translateX(0)" },
-  },
-  "@keyframes timelineDotPop": {
-    "0%": { transform: "scale(0)", opacity: 0 },
-    "70%": { transform: "scale(1.25)", opacity: 1 },
-    "100%": { transform: "scale(1)", opacity: 1 },
-  },
-  "@keyframes timelineDotPulse": {
-    "0%, 100%": { opacity: 1, filter: "brightness(1)" },
-    "50%": { opacity: 0.85, filter: "brightness(1.15)" },
   },
   addAttachmentBtn: { marginTop: theme.spacing(1) },
   inputFile: { display: "none" },
@@ -246,21 +208,46 @@ const useStyles = makeStyles((theme) => ({
   changeClientAutocomplete: { minWidth: 280 },
 }));
 
-const STATUS_OPTIONS = [
-  { value: "entregue", label: "Entregue" },
-  { value: "em_producao", label: "Em produção" },
-  { value: "aguardando", label: "Aguardando" },
-  { value: "cancelado", label: "Cancelado" },
+const DEFAULT_STATUSES = [
+  { value: "entregue", label: "Entregue", color: "#2e7d32" },
+  { value: "em_producao", label: "Em produção", color: "#ed6c02" },
+  { value: "aguardando", label: "Aguardando", color: "#1976d2" },
+  { value: "cancelado", label: "Cancelado", color: "#757575" },
 ];
 
-// Cores por status para a timeline: entregue=verde, produção=laranja, cancelado=cinza, aberto/aguardando=azul
-function getStatusColor(label) {
+const LS_KEY = "kanban_custom_statuses";
+
+function loadStatusesFromStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function saveStatusesToStorage(statuses) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(statuses));
+  } catch (e) {}
+}
+
+function getStatusColor(label, statusList) {
   if (!label) return "#1976d2";
+  const list = statusList || DEFAULT_STATUSES;
+  const match = list.find(
+    (s) =>
+      s.label?.toLowerCase() === String(label).toLowerCase() ||
+      s.value?.toLowerCase() === String(label).toLowerCase()
+  );
+  if (match?.color) return match.color;
   const t = String(label).toLowerCase();
   if (t.includes("entregue") || t.includes("concluído") || t.includes("concluido")) return "#2e7d32";
-  if (t.includes("produção") || t.includes("producao") || t.includes("criação") || t.includes("criacao")) return "#ed6c02";
+  if (t.includes("produção") || t.includes("producao")) return "#ed6c02";
   if (t.includes("cancelado")) return "#757575";
-  if (t.includes("em aberto") || t.includes("aguardando")) return "#1976d2";
+  if (t.includes("aguardando")) return "#1976d2";
   return "#d32f2f";
 }
 
@@ -270,7 +257,6 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
   const editorRef = useRef(null);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
-  const timelineRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [ticket, setTicket] = useState(null);
@@ -287,11 +273,104 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
   const [contactSearch, setContactSearch] = useState("");
   const [selectedNewContact, setSelectedNewContact] = useState(null);
   const [loadingContact, setLoadingContact] = useState(false);
-  const [runnerTop, setRunnerTop] = useState(null);
+  const [logsExpanded, setLogsExpanded] = useState(false);
+  const [statusOptions, setStatusOptions] = useState(DEFAULT_STATUSES);
+  const [statusManagerOpen, setStatusManagerOpen] = useState(false);
+  const [newStatusLabel, setNewStatusLabel] = useState("");
+  const [newStatusColor, setNewStatusColor] = useState("#1976d2");
+  const [editingStatusIdx, setEditingStatusIdx] = useState(null);
   const [valorServico, setValorServico] = useState(0);
   const [valorEntrada, setValorEntrada] = useState(0);
   const [nomeProjeto, setNomeProjeto] = useState("");
   const [customFields, setCustomFields] = useState([]);
+
+  // Carregar status personalizados (API com fallback localStorage)
+  useEffect(() => {
+    const loadStatuses = async () => {
+      try {
+        const { data } = await api.get("/quadro-statuses");
+        const list = data.statuses || data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          const parsed = list.map((s) => ({
+            value: s.value || s.label?.toLowerCase().replace(/\s+/g, "_") || "",
+            label: s.label || s.name || "",
+            color: s.color || "#1976d2",
+          }));
+          setStatusOptions(parsed);
+          saveStatusesToStorage(parsed);
+          return;
+        }
+      } catch (err) {
+        // API indisponível, tentar localStorage
+      }
+      const stored = loadStatusesFromStorage();
+      if (stored) setStatusOptions(stored);
+    };
+    loadStatuses();
+  }, []);
+
+  const saveStatuses = async (newList) => {
+    setStatusOptions(newList);
+    saveStatusesToStorage(newList);
+    try {
+      await api.put("/quadro-statuses", { statuses: newList });
+    } catch (err) {
+      // Salvo no localStorage, backend pode não ter o endpoint ainda
+    }
+  };
+
+  const handleAddStatus = () => {
+    const label = newStatusLabel.trim();
+    if (!label) return;
+    const value = label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    if (statusOptions.some((s) => s.value === value)) {
+      toast.warn("Já existe um status com esse nome.");
+      return;
+    }
+    const updated = [...statusOptions, { value, label, color: newStatusColor }];
+    saveStatuses(updated);
+    setNewStatusLabel("");
+    setNewStatusColor("#1976d2");
+    toast.success(`Status "${label}" criado.`);
+  };
+
+  const handleUpdateStatus = (index) => {
+    const label = newStatusLabel.trim();
+    if (!label) return;
+    const value = label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    const updated = statusOptions.map((s, i) =>
+      i === index ? { value, label, color: newStatusColor } : s
+    );
+    saveStatuses(updated);
+    setEditingStatusIdx(null);
+    setNewStatusLabel("");
+    setNewStatusColor("#1976d2");
+    toast.success("Status atualizado.");
+  };
+
+  const handleDeleteStatus = (index) => {
+    const s = statusOptions[index];
+    if (!window.confirm(`Excluir o status "${s.label}"?`)) return;
+    const updated = statusOptions.filter((_, i) => i !== index);
+    if (updated.length === 0) {
+      toast.warn("É necessário ter pelo menos um status.");
+      return;
+    }
+    saveStatuses(updated);
+    toast.success("Status removido.");
+  };
+
+  const handleEditStatusStart = (index) => {
+    setEditingStatusIdx(index);
+    setNewStatusLabel(statusOptions[index].label);
+    setNewStatusColor(statusOptions[index].color);
+  };
+
+  const handleCancelEditStatus = () => {
+    setEditingStatusIdx(null);
+    setNewStatusLabel("");
+    setNewStatusColor("#1976d2");
+  };
 
   const resolveImageUrl = (url) => {
     if (!url || typeof url !== "string") return null;
@@ -384,34 +463,12 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
       setCustomFields([]);
       setEditMode(false);
       setChangeClientOpen(false);
-      setRunnerTop(null);
+      setLogsExpanded(false);
       return;
     }
     setLoading(true);
     loadAll();
   }, [open, ticketUuid, onClose, loadAll]);
-
-  // Runner: vai de um ponto ao próximo na timeline (mede posições dos dots e anima com transition)
-  useEffect(() => {
-    if (!statusLogs.length || !open) {
-      setRunnerTop(null);
-      return;
-    }
-    const DOT_OFFSET = 10; // top do dot dentro do item
-    const MS_PER_DOT = 650; // tempo entre cada ponto
-    const t = setTimeout(() => {
-      const el = timelineRef.current;
-      if (!el) return;
-      const items = el.querySelectorAll("[data-timeline-item]");
-      if (items.length === 0) return;
-      const positions = Array.from(items).map((item) => item.offsetTop + DOT_OFFSET);
-      setRunnerTop(positions[0]);
-      positions.slice(1).forEach((top, i) => {
-        setTimeout(() => setRunnerTop(top), (i + 1) * MS_PER_DOT);
-      });
-    }, 400); // espera linha desenhar + itens começarem a entrar
-    return () => clearTimeout(t);
-  }, [statusLogs, open]);
 
   const handleAtualizar = () => {
     setRefreshing(true);
@@ -566,17 +623,86 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
     }
   }, [readOnly, changeClientOpen, contactSearch]);
 
+  const getExtraInfoValue = (extraInfo, fieldName) => {
+    if (!extraInfo || !Array.isArray(extraInfo)) return "";
+    const found = extraInfo.find(
+      (info) => info.name?.toLowerCase() === fieldName.toLowerCase()
+    );
+    return found?.value || "";
+  };
+
   const handleTrocarCliente = async () => {
     if (!selectedNewContact?.id || !ticket?.id) return;
     try {
-      await api.put(`/tickets/${ticket.id}/contact`, { contactId: selectedNewContact.id });
-      toast.success("Cliente alterado.");
-      setTicket((prev) => (prev ? { ...prev, contact: selectedNewContact } : null));
-      const newPic = selectedNewContact.urlPicture || selectedNewContact.profilePicUrl || null;
+      // Buscar dados completos do contato (incluindo extraInfo)
+      let fullContact = selectedNewContact;
+      try {
+        const { data } = await api.get(`/contacts/${selectedNewContact.id}`);
+        fullContact = data || selectedNewContact;
+      } catch (fetchErr) {
+        // Usa os dados do autocomplete se falhar
+      }
+
+      await api.put(`/tickets/${ticket.id}/contact`, { contactId: fullContact.id });
+
+      // Auto-preencher campos com os dados do contato
+      const extra = fullContact.extraInfo || [];
+      const contactCompany = getExtraInfoValue(extra, "empresa") || getExtraInfoValue(extra, "nome_empresa") || getExtraInfoValue(extra, "company") || "";
+      const contactCpfCnpj = getExtraInfoValue(extra, "cpf") || getExtraInfoValue(extra, "cnpj") || getExtraInfoValue(extra, "cpf_cnpj") || "";
+      const contactAddress = getExtraInfoValue(extra, "endereco") || getExtraInfoValue(extra, "endereço") || getExtraInfoValue(extra, "address") || "";
+      const contactEmail = fullContact.email || getExtraInfoValue(extra, "email") || "";
+
+      // Preencher nome do projeto com a empresa se vazio
+      if (!nomeProjeto && contactCompany) {
+        setNomeProjeto(contactCompany);
+      }
+
+      // Criar campos personalizados automaticamente com dados do contato
+      const autoFields = [];
+      if (contactCpfCnpj) autoFields.push({ name: "CPF/CNPJ", value: contactCpfCnpj, type: "text" });
+      if (fullContact.name) autoFields.push({ name: "Nome do Cliente", value: fullContact.name, type: "text" });
+      if (contactCompany) autoFields.push({ name: "Empresa", value: contactCompany, type: "text" });
+      if (contactEmail) autoFields.push({ name: "E-mail", value: contactEmail, type: "text" });
+      if (fullContact.number) autoFields.push({ name: "Contato", value: fullContact.number, type: "text" });
+      if (contactAddress) autoFields.push({ name: "Endereço", value: contactAddress, type: "text" });
+
+      // Mesclar com campos existentes (não sobrescrever campos que já existem)
+      if (autoFields.length > 0) {
+        setCustomFields((prev) => {
+          const existingNames = prev.map((f) => (f.name || "").toLowerCase().trim());
+          const newFields = autoFields.filter(
+            (af) => !existingNames.includes(af.name.toLowerCase().trim())
+          );
+          const merged = [...prev, ...newFields];
+          return merged;
+        });
+      }
+
+      toast.success("Cliente vinculado e campos preenchidos automaticamente.");
+      setTicket((prev) => (prev ? { ...prev, contact: fullContact } : null));
+      const newPic = fullContact.urlPicture || fullContact.profilePicUrl || null;
       setCoverImage(resolveImageUrl(newPic));
       setChangeClientOpen(false);
       setSelectedNewContact(null);
       setContactSearch("");
+
+      // Salvar automaticamente os campos e valores no backend
+      try {
+        const allFields = [...customFields];
+        const existingNames = allFields.map((f) => (f.name || "").toLowerCase().trim());
+        const autoFieldsMerged = autoFields.filter(
+          (af) => !existingNames.includes(af.name.toLowerCase().trim())
+        );
+        const finalFields = [...allFields, ...autoFieldsMerged].filter((f) => (f.name || "").trim());
+        await api.put("/tickets/" + ticket.id + "/quadro", {
+          valorServico,
+          valorEntrada,
+          nomeProjeto: (!nomeProjeto && contactCompany) ? contactCompany : (nomeProjeto || undefined),
+          customFields: finalFields.map((f) => ({ name: (f.name || "").trim(), value: (f.value || "").trim(), type: f.type || "text" })),
+        });
+      } catch (saveErr) {
+        // Não-crítico, os campos já foram preenchidos na UI
+      }
     } catch (err) {
       toast.error(err?.response?.data?.message || "Erro ao trocar cliente.");
     }
@@ -612,34 +738,51 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
           )}
           {readOnly ? (
             <Typography variant="body2" color="textSecondary" style={{ marginLeft: 8 }}>
-              Status: <strong>{STATUS_OPTIONS.find((o) => o.value === status)?.label || status}</strong>
+              Status: <strong>{statusOptions.find((o) => o.value === status)?.label || status}</strong>
             </Typography>
           ) : (
-            <FormControl variant="outlined" size="small" className={classes.statusSelect}>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={status}
-                onChange={async (e) => {
-                  const v = e.target.value;
-                  setStatus(v);
-                  if (!ticket?.id) return;
-                  try {
-                    await api.put("/tickets/" + ticket.id + "/quadro/status", { status: v });
-                    toast.success("Status atualizado.");
-                  } catch (err) {
-                    setStatus(status);
-                    toast.error(err?.response?.data?.message || "Erro ao atualizar status.");
-                  }
-                }}
-                label="Status"
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <>
+              <FormControl variant="outlined" size="small" className={classes.statusSelect}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={status}
+                  onChange={async (e) => {
+                    const v = e.target.value;
+                    setStatus(v);
+                    if (!ticket?.id) return;
+                    try {
+                      await api.put("/tickets/" + ticket.id + "/quadro/status", { status: v });
+                      toast.success("Status atualizado.");
+                    } catch (err) {
+                      setStatus(status);
+                      toast.error(err?.response?.data?.message || "Erro ao atualizar status.");
+                    }
+                  }}
+                  label="Status"
+                  renderValue={(val) => {
+                    const opt = statusOptions.find((o) => o.value === val);
+                    return (
+                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <FiberManualRecord style={{ fontSize: 12, color: opt?.color || "#999" }} />
+                        {opt?.label || val}
+                      </span>
+                    );
+                  }}
+                >
+                  {statusOptions.map((opt) => (
+                    <MenuItem key={opt.value} value={opt.value}>
+                      <FiberManualRecord style={{ fontSize: 12, color: opt.color, marginRight: 8 }} />
+                      {opt.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Tooltip title="Gerenciar status personalizados">
+                <IconButton size="small" onClick={() => setStatusManagerOpen(true)} style={{ marginLeft: 4 }}>
+                  <Settings fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
           )}
         </div>
         {readOnly && (
@@ -671,7 +814,12 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
           <>
             {!readOnly && changeClientOpen && (
               <Paper variant="outlined" className={classes.changeClientRow} style={{ padding: 16 }}>
-                <Typography variant="subtitle2" style={{ marginBottom: 8 }}>Trocar cliente</Typography>
+                <Typography variant="subtitle2" style={{ marginBottom: 8 }}>
+                  Vincular contato
+                </Typography>
+                <Typography variant="caption" color="textSecondary" display="block" style={{ marginBottom: 12 }}>
+                  Ao vincular um contato, os dados (CPF/CNPJ, nome, empresa, e-mail, telefone, endereço) serão preenchidos automaticamente.
+                </Typography>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <Autocomplete
                     className={classes.changeClientAutocomplete}
@@ -691,10 +839,43 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                     )}
                   />
                   <Button variant="contained" color="primary" size="small" disabled={!selectedNewContact} onClick={handleTrocarCliente}>
-                    Aplicar
+                    Vincular e preencher
                   </Button>
                   <Button size="small" onClick={() => setChangeClientOpen(false)}>Cancelar</Button>
                 </div>
+                {selectedNewContact && (
+                  <Paper
+                    variant="outlined"
+                    style={{
+                      marginTop: 12,
+                      padding: 12,
+                      backgroundColor: "#f0f7ff",
+                      borderColor: "#90caf9",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Typography variant="caption" style={{ fontWeight: 600, display: "block", marginBottom: 6 }}>
+                      Dados que serão preenchidos:
+                    </Typography>
+                    <Box display="flex" flexWrap="wrap" style={{ gap: 8 }}>
+                      {selectedNewContact.name && (
+                        <Typography variant="caption" style={{ backgroundColor: "#e3f2fd", padding: "2px 8px", borderRadius: 4 }}>
+                          Nome: {selectedNewContact.name}
+                        </Typography>
+                      )}
+                      {selectedNewContact.number && (
+                        <Typography variant="caption" style={{ backgroundColor: "#e3f2fd", padding: "2px 8px", borderRadius: 4 }}>
+                          Tel: {selectedNewContact.number}
+                        </Typography>
+                      )}
+                      {selectedNewContact.email && (
+                        <Typography variant="caption" style={{ backgroundColor: "#e3f2fd", padding: "2px 8px", borderRadius: 4 }}>
+                          E-mail: {selectedNewContact.email}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Paper>
+                )}
               </Paper>
             )}
 
@@ -888,74 +1069,214 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
             </Paper>
 
             <Paper elevation={0} className={classes.logsSection}>
-              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-                <History fontSize="small" />
-                Histórico de Status
-              </Typography>
-              {statusLogs.length === 0 ? (
-                <Typography variant="body2" color="textSecondary">
-                  Nenhuma alteração de coluna registrada ainda.
+              <div
+                className={classes.logsHeader}
+                onClick={() => setLogsExpanded((v) => !v)}
+              >
+                <Typography variant="subtitle2" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <History fontSize="small" />
+                  Histórico de Status ({statusLogs.length})
                 </Typography>
-              ) : (
-                <div className={classes.timeline} ref={timelineRef}>
-                  {statusLogs.length > 0 && (
-                    <div
-                      className={classes.timelineRunner}
-                      aria-hidden="true"
-                      style={{
-                        top: runnerTop != null ? runnerTop : 8,
-                        opacity: runnerTop != null ? 1 : 0,
-                      }}
-                    />
-                  )}
-                  {statusLogs.map((log, index) => {
-                    const statusColor = getStatusColor(log.toLabel);
-                    return (
-                      <div
-                        key={log.id}
-                        data-timeline-item
-                        className={classes.timelineItem}
-                        style={{ animationDelay: `${index * 0.1}s` }}
-                      >
-                        <div
-                          className={classes.timelineDot}
-                          style={{
-                            backgroundColor: statusColor,
-                            animationDelay: `${index * 0.1}s, ${index * 0.1 + 0.5}s`,
-                          }}
-                        />
-                        <div
-                          className={classes.timelineCard}
-                          style={{ borderLeftColor: statusColor }}
-                        >
-                          {log.createdAt && (
-                            <div
-                              className={classes.timelineTime}
-                              style={{ color: statusColor }}
-                            >
-                              {format(parseISO(log.createdAt), "dd/MM/yyyy · HH:mm")}
-                            </div>
-                          )}
-                          <Typography className={classes.timelineLabel}>
+                <Typography variant="caption" color="textSecondary">
+                  {logsExpanded ? "▲ Recolher" : "▼ Expandir"}
+                </Typography>
+              </div>
+              {logsExpanded && (
+                statusLogs.length === 0 ? (
+                  <Typography variant="body2" color="textSecondary" style={{ marginTop: 8 }}>
+                    Nenhuma alteração de coluna registrada.
+                  </Typography>
+                ) : (
+                  <div className={classes.logsList}>
+                    {statusLogs.map((log) => {
+                      const statusColor = getStatusColor(log.toLabel, statusOptions);
+                      return (
+                        <div key={log.id} className={classes.logRow}>
+                          <div
+                            className={classes.logDot}
+                            style={{ backgroundColor: statusColor }}
+                          />
+                          <span className={classes.logTime}>
+                            {log.createdAt
+                              ? format(parseISO(log.createdAt), "dd/MM/yy HH:mm")
+                              : "—"}
+                          </span>
+                          <span className={classes.logLabel}>
                             <span>{log.fromLabel || "?"}</span>
                             {" → "}
                             <strong style={{ color: statusColor }}>{log.toLabel || "?"}</strong>
-                          </Typography>
+                          </span>
                           {log.userName && (
-                            <Typography className={classes.timelineUser}>
-                              por {log.userName}
-                            </Typography>
+                            <span className={classes.logUser}>
+                              {log.userName}
+                            </span>
                           )}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </Paper>
           </>
         )}
       </DialogContent>
+
+      {/* Gerenciador de Status Personalizados */}
+      <StatusDialog
+        open={statusManagerOpen}
+        onClose={() => { setStatusManagerOpen(false); handleCancelEditStatus(); }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <StatusDialogTitle>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Settings fontSize="small" />
+            Gerenciar Status Personalizados
+          </div>
+        </StatusDialogTitle>
+        <StatusDialogContent dividers>
+          <Typography variant="body2" color="textSecondary" style={{ marginBottom: 16 }}>
+            Crie, edite ou remova status para adaptar o quadro ao seu processo de trabalho.
+          </Typography>
+
+          {/* Lista de status existentes */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+            {statusOptions.map((s, idx) => (
+              <Paper
+                key={s.value + idx}
+                variant="outlined"
+                style={{
+                  padding: "10px 14px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  borderLeftWidth: 4,
+                  borderLeftColor: s.color,
+                }}
+              >
+                <FiberManualRecord style={{ fontSize: 16, color: s.color }} />
+                <Typography variant="body2" style={{ flex: 1, fontWeight: 500 }}>
+                  {s.label}
+                </Typography>
+                <Typography variant="caption" color="textSecondary" style={{ marginRight: 8 }}>
+                  {s.value}
+                </Typography>
+                <Tooltip title="Editar">
+                  <IconButton size="small" onClick={() => handleEditStatusStart(idx)}>
+                    <Edit style={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Excluir">
+                  <IconButton size="small" onClick={() => handleDeleteStatus(idx)} style={{ color: "#d32f2f" }}>
+                    <Delete style={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              </Paper>
+            ))}
+          </div>
+
+          {/* Formulário de adicionar/editar */}
+          <Paper
+            variant="outlined"
+            style={{
+              padding: 16,
+              backgroundColor: editingStatusIdx !== null ? "#fff3e0" : "#f5f5f5",
+              borderRadius: 8,
+            }}
+          >
+            <Typography variant="subtitle2" style={{ marginBottom: 10 }}>
+              {editingStatusIdx !== null ? "Editar status" : "Adicionar novo status"}
+            </Typography>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <TextField
+                size="small"
+                variant="outlined"
+                label="Nome do status"
+                placeholder="Ex.: Em revisão"
+                value={newStatusLabel}
+                onChange={(e) => setNewStatusLabel(e.target.value)}
+                style={{ flex: 1, minWidth: 180 }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    editingStatusIdx !== null
+                      ? handleUpdateStatus(editingStatusIdx)
+                      : handleAddStatus();
+                  }
+                }}
+              />
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Typography variant="caption" color="textSecondary">Cor:</Typography>
+                <input
+                  type="color"
+                  value={newStatusColor}
+                  onChange={(e) => setNewStatusColor(e.target.value)}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    border: "1px solid #ccc",
+                    borderRadius: 6,
+                    cursor: "pointer",
+                    padding: 2,
+                  }}
+                />
+              </div>
+              {/* Cores rápidas */}
+              <div style={{ display: "flex", gap: 4 }}>
+                {["#2e7d32", "#ed6c02", "#1976d2", "#757575", "#d32f2f", "#9c27b0", "#00838f", "#e91e63"].map((c) => (
+                  <div
+                    key={c}
+                    onClick={() => setNewStatusColor(c)}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: "50%",
+                      backgroundColor: c,
+                      cursor: "pointer",
+                      border: newStatusColor === c ? "2px solid #000" : "2px solid transparent",
+                      transition: "border 0.15s",
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              {editingStatusIdx !== null ? (
+                <>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    onClick={() => handleUpdateStatus(editingStatusIdx)}
+                    disabled={!newStatusLabel.trim()}
+                  >
+                    Salvar alteração
+                  </Button>
+                  <Button size="small" onClick={handleCancelEditStatus}>
+                    Cancelar
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
+                  startIcon={<Add />}
+                  onClick={handleAddStatus}
+                  disabled={!newStatusLabel.trim()}
+                >
+                  Adicionar status
+                </Button>
+              )}
+            </div>
+          </Paper>
+        </StatusDialogContent>
+        <StatusDialogActions>
+          <Button onClick={() => { setStatusManagerOpen(false); handleCancelEditStatus(); }}>
+            Fechar
+          </Button>
+        </StatusDialogActions>
+      </StatusDialog>
     </Dialog>
   );
 }

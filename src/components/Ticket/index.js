@@ -76,12 +76,6 @@ const Ticket = () => {
   const { companyId } = user;
 
   useEffect(() => {
-    console.log("======== Ticket ===========")
-    console.log(ticket)
-    console.log("===========================")
-}, [ticket])
-
-  useEffect(() => {
     setLoading(true);
     const delayDebounceFn = setTimeout(() => {
       const fetchTicket = async () => {
@@ -110,40 +104,40 @@ const Ticket = () => {
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [ticketId, user, history]);
+  }, [ticketId, history]);
+
+  const ticketIdRef = useRef(ticket.id);
+  ticketIdRef.current = ticket.id;
 
   useEffect(() => {
-    if (!ticket && !ticket.id && ticket.uuid !== ticketId && ticketId === "undefined") {
+    if (!ticket.id || ticketId === "undefined") {
       return;
     }
 
     if (user.companyId) {
-      //    const socket = socketManager.GetSocket();
 
       const onConnectTicket = () => {
         socket.emit("joinChatBox", `${ticket.id}`);
       }
 
       const onCompanyTicket = (data) => {
-        if (data.action === "update" && data.ticket.id === ticket?.id) {
+        if (data.action === "update" && data.ticket.id === ticketIdRef.current) {
           setTicket(data.ticket);
         }
 
-        if (data.action === "delete" && data.ticketId === ticket?.id) {
+        if (data.action === "delete" && data.ticketId === ticketIdRef.current) {
           history.push("/tickets");
         }
       };
 
       const onCompanyContactTicket = (data) => {
         if (data.action === "update") {
-          // if (isMounted) {
           setContact((prevState) => {
             if (prevState.id === data.contact?.id) {
               return { ...prevState, ...data.contact };
             }
             return prevState;
           });
-          // }
         }
       };
 
@@ -152,14 +146,13 @@ const Ticket = () => {
       socket.on(`company-${companyId}-contact`, onCompanyContactTicket);
 
       return () => {
-
         socket.emit("joinChatBoxLeave", `${ticket.id}`);
         socket.off("connect", onConnectTicket);
         socket.off(`company-${companyId}-ticket`, onCompanyTicket);
         socket.off(`company-${companyId}-contact`, onCompanyContactTicket);
       };
     }
-  }, [ticketId, ticket, history]);
+  }, [ticketId, ticket.id, history, user.companyId, companyId, socket]);
 
   const handleDrawerOpen = useCallback(() => {
     setDrawerOpen(true);

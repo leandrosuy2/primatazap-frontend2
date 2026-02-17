@@ -620,8 +620,7 @@ const hanldeReplyMessage = (e, message) => {
 };
 
 const checkMessageMedia = (message) => {
-  console.log(message)
-  if (message.mediaType === "locationMessage" && message.body.split('|').length >= 2) {
+   if (message.mediaType === "locationMessage" && message.body.split('|').length >= 2) {
     let locationParts = message.body.split('|')
     let imageLocation = locationParts[0]
     let linkLocation = locationParts[1]

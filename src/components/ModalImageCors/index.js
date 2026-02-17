@@ -22,15 +22,22 @@ const ModalImageCors = ({ imageUrl }) => {
 	const [blobUrl, setBlobUrl] = useState("");
 
 	useEffect(() => {
-		if (!imageUrl) return;
+		if (!imageUrl || imageUrl === "undefined" || imageUrl === "null") {
+			setFetching(false);
+			return;
+		}
 		const fetchImage = async () => {
-			const { data, headers } = await api.get(imageUrl, {
-				responseType: "blob",
-			});
-			const url = window.URL.createObjectURL(
-				new Blob([data], { type: headers["content-type"] })
-			);
-			setBlobUrl(url);
+			try {
+				const { data, headers } = await api.get(imageUrl, {
+					responseType: "blob",
+				});
+				const url = window.URL.createObjectURL(
+					new Blob([data], { type: headers["content-type"] })
+				);
+				setBlobUrl(url);
+			} catch (err) {
+				console.warn("Erro ao carregar imagem:", imageUrl);
+			}
 			setFetching(false);
 		};
 		fetchImage();

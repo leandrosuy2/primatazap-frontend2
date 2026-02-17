@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer, useContext, useMemo } from "react";
+import React, { useState, useEffect, useReducer, useContext, useRef } from "react";
 
 import { makeStyles } from "@material-ui/core/styles";
 import List from "@material-ui/core/List";
@@ -221,9 +221,8 @@ const TicketsListCustom = (props) => {
     //   const socketManager = useContext(SocketContext);
     const { user, socket } = useContext(AuthContext);
 
-    const { profile, queues } = user;
+    const { profile, queues, companyId } = user;
     const showTicketWithoutQueue = user.allTicket === 'enable';
-    const companyId = user.companyId;
 
     useEffect(() => {
         dispatch({ type: "RESET" });
@@ -267,56 +266,60 @@ const TicketsListCustom = (props) => {
 
     }, [tickets]);
 
+    const userIdRef = useRef(user?.id);
+    userIdRef.current = user?.id;
+
+    const showAllRef = useRef(showAll);
+    showAllRef.current = showAll;
+
+    const selectedQueueIdsRef = useRef(selectedQueueIds);
+    selectedQueueIdsRef.current = selectedQueueIds;
+
+    const showTicketWithoutQueueRef = useRef(showTicketWithoutQueue);
+    showTicketWithoutQueueRef.current = showTicketWithoutQueue;
+
+    const sortTicketsRef = useRef(sortTickets);
+    sortTicketsRef.current = sortTickets;
+
     useEffect(() => {
         const shouldUpdateTicket = ticket => {
-            return (!ticket?.userId || ticket?.userId === user?.id || showAll) &&
-                ((!ticket?.queueId && showTicketWithoutQueue) || selectedQueueIds.indexOf(ticket?.queueId) > -1)
-            // (!blockNonDefaultConnections || (ticket.status == 'group' && ignoreUserConnectionForGroups) || !user?.whatsappId || ticket.whatsappId == user?.whatsappId);
+            return (!ticket?.userId || ticket?.userId === userIdRef.current || showAllRef.current) &&
+                ((!ticket?.queueId && showTicketWithoutQueueRef.current) || selectedQueueIdsRef.current.indexOf(ticket?.queueId) > -1)
         }
-        // const shouldUpdateTicketUser = (ticket) =>
-        //     selectedQueueIds.indexOf(ticket?.queueId) > -1 && (ticket?.userId === user?.id || !ticket?.userId);
 
         const notBelongsToUserQueues = (ticket) =>
-            ticket.queueId && selectedQueueIds.indexOf(ticket.queueId) === -1;
+            ticket.queueId && selectedQueueIdsRef.current.indexOf(ticket.queueId) === -1;
 
         const onCompanyTicketTicketsList = (data) => {
-            // console.log("onCompanyTicketTicketsList", data)
             if (data.action === "updateUnread") {
                 dispatch({
                     type: "RESET_UNREAD",
                     payload: data.ticketId,
                     status: status,
-                    sortDir: sortTickets
+                    sortDir: sortTicketsRef.current
                 });
             }
-            // console.log(shouldUpdateTicket(data.ticket))
             if (data.action === "update" &&
                 shouldUpdateTicket(data.ticket) && data.ticket.status === status) {
                 dispatch({
                     type: "UPDATE_TICKET",
                     payload: data.ticket,
                     status: status,
-                    sortDir: sortTickets
+                    sortDir: sortTicketsRef.current
                 });
             }
 
-            // else if (data.action === "update" && shouldUpdateTicketUser(data.ticket) && data.ticket.status === status) {
-            //     dispatch({
-            //         type: "UPDATE_TICKET",
-            //         payload: data.ticket,
-            //     });
-            // }
             if (data.action === "update" && notBelongsToUserQueues(data.ticket)) {
                 dispatch({
                     type: "DELETE_TICKET", payload: data.ticket?.id, status: status,
-                    sortDir: sortTickets
+                    sortDir: sortTicketsRef.current
                 });
             }
 
             if (data.action === "delete") {
                 dispatch({
                     type: "DELETE_TICKET", payload: data?.ticketId, status: status,
-                    sortDir: sortTickets
+                    sortDir: sortTicketsRef.current
                 });
 
             }
@@ -329,15 +332,9 @@ const TicketsListCustom = (props) => {
                     type: "UPDATE_TICKET_UNREAD_MESSAGES",
                     payload: data.ticket,
                     status: status,
-                    sortDir: sortTickets
+                    sortDir: sortTicketsRef.current
                 });
             }
-            // else if (data.action === "create" && shouldUpdateTicketUser(data.ticket) && data.ticket.status === status) {
-            //     dispatch({
-            //         type: "UPDATE_TICKET_UNREAD_MESSAGES",
-            //         payload: data.ticket,
-            //     });
-            // }
         };
 
         const onCompanyContactTicketsList = (data) => {
@@ -346,7 +343,7 @@ const TicketsListCustom = (props) => {
                     type: "UPDATE_TICKET_CONTACT",
                     payload: data.contact,
                     status: status,
-                    sortDir: sortTickets
+                    sortDir: sortTicketsRef.current
                 });
             }
         };
@@ -359,24 +356,28 @@ const TicketsListCustom = (props) => {
             }
         }
 
-        socket.on("connect", onConnectTicketsList)
-        socket.on(`company-${companyId}-ticket`, onCompanyTicketTicketsList);
-        socket.on(`company-${companyId}-appMessage`, onCompanyAppMessageTicketsList);
-        socket.on(`company-${companyId}-contact`, onCompanyContactTicketsList);
+        if (socket.on) {
+            socket.on("connect", onConnectTicketsList)
+            socket.on(`company-${companyId}-ticket`, onCompanyTicketTicketsList);
+            socket.on(`company-${companyId}-appMessage`, onCompanyAppMessageTicketsList);
+            socket.on(`company-${companyId}-contact`, onCompanyContactTicketsList);
+        }
 
         return () => {
-            if (status) {
-                socket.emit("leaveTickets", status);
-            } else {
-                socket.emit("leaveNotification");
+            if (socket.off) {
+                if (status) {
+                    socket.emit("leaveTickets", status);
+                } else {
+                    socket.emit("leaveNotification");
+                }
+                socket.off("connect", onConnectTicketsList);
+                socket.off(`company-${companyId}-ticket`, onCompanyTicketTicketsList);
+                socket.off(`company-${companyId}-appMessage`, onCompanyAppMessageTicketsList);
+                socket.off(`company-${companyId}-contact`, onCompanyContactTicketsList);
             }
-            socket.off("connect", onConnectTicketsList);
-            socket.off(`company-${companyId}-ticket`, onCompanyTicketTicketsList);
-            socket.off(`company-${companyId}-appMessage`, onCompanyAppMessageTicketsList);
-            socket.off(`company-${companyId}-contact`, onCompanyContactTicketsList);
         };
 
-    }, [status, showAll, user, selectedQueueIds, tags, users, profile, queues, sortTickets, showTicketWithoutQueue]);
+    }, [status, companyId, socket]);
 
     useEffect(() => {
         if (typeof updateCount === "function") {
