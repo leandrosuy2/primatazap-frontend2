@@ -212,6 +212,15 @@ const useStyles = makeStyles((theme) => ({
       color: "#fff",
     },
   },
+  cardCapa: {
+    width: "100%",
+    height: 72,
+    objectFit: "cover",
+    display: "block",
+    backgroundColor: theme.palette.grey[200],
+    borderTop: "1px solid",
+    borderColor: theme.palette.divider,
+  },
   cardBody: {
     padding: theme.spacing(0.75, 1.25),
     borderTop: "1px solid",
@@ -888,6 +897,13 @@ const Kanban = () => {
                       />
                     </div>
                   </div>
+                  {(ticket.quadroCapaUrl || ticket.capaUrl) && (
+                    <img
+                      src={getCardImageUrl(ticket)}
+                      alt="Capa"
+                      className={classes.cardCapa}
+                    />
+                  )}
                   {(ticket.quadroValorServico != null || ticket.quadroValorEntrada != null || (ticket.quadroCustomFields && ticket.quadroCustomFields.length > 0)) && (
                     <div className={classes.cardBody}>
                       {ticket.quadroValorServico != null && (
