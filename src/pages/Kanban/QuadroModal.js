@@ -40,10 +40,18 @@ import {
   DialogContent as StatusDialogContent,
   DialogActions as StatusDialogActions,
 } from "@material-ui/core";
+import InputAdornment from "@material-ui/core/InputAdornment";
+import Divider from "@material-ui/core/Divider";
+import Avatar from "@material-ui/core/Avatar";
+import Person from "@material-ui/icons/Person";
+import FileCopy from "@material-ui/icons/FileCopy";
+import Create from "@material-ui/icons/Create";
+import { CopyToClipboard } from "react-copy-to-clipboard";
 import api from "../../services/api";
 import { format, parseISO } from "date-fns";
 import { AuthContext } from "../../context/Auth/AuthContext";
 import { toast } from "react-toastify";
+import formatSerializedId from "../../utils/formatSerializedId";
 
 const useStyles = makeStyles((theme) => ({
   dialog: {
@@ -206,6 +214,62 @@ const useStyles = makeStyles((theme) => ({
   inputFile: { display: "none" },
   changeClientRow: { marginBottom: theme.spacing(2) },
   changeClientAutocomplete: { minWidth: 280 },
+  contactSection: {
+    padding: theme.spacing(2),
+    marginBottom: theme.spacing(2),
+  },
+  contactHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: theme.spacing(2),
+    marginBottom: theme.spacing(2),
+  },
+  contactAvatar: {
+    width: 56,
+    height: 56,
+    border: `2px solid ${theme.palette.primary.main}`,
+  },
+  contactPhoneRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+  },
+  contactFieldsGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: theme.spacing(1.5),
+    [theme.breakpoints.down("xs")]: {
+      gridTemplateColumns: "1fr",
+    },
+  },
+  contactFieldFull: {
+    gridColumn: "1 / -1",
+  },
+  contactSectionTitle: {
+    fontWeight: 600,
+    fontSize: 13,
+    color: theme.palette.text.secondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    gridColumn: "1 / -1",
+    marginTop: theme.spacing(1),
+  },
+  contactChipContainer: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 4,
+    gridColumn: "1 / -1",
+  },
+  contactProductChip: {
+    backgroundColor: theme.palette.primary.light,
+    color: "#fff",
+    padding: "2px 8px",
+    borderRadius: 12,
+    fontSize: 12,
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+  },
 }));
 
 const DEFAULT_STATUSES = [
@@ -283,6 +347,14 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
   const [valorEntrada, setValorEntrada] = useState(0);
   const [nomeProjeto, setNomeProjeto] = useState("");
   const [customFields, setCustomFields] = useState([]);
+
+  // Estado dos dados do contato (mesmos campos do ContactDrawer)
+  const [contactFormData, setContactFormData] = useState({
+    name: "", email: "", country: "", city: "", state: "",
+    leadOrigin: "", entryDate: "", exitDate: "", dealValue: "0,00",
+    company: "", position: "", productInput: "", products: [], observation: "",
+  });
+  const [contactFormSaving, setContactFormSaving] = useState(false);
 
   // Carregar status personalizados (API com fallback localStorage)
   useEffect(() => {
@@ -370,6 +442,94 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
     setEditingStatusIdx(null);
     setNewStatusLabel("");
     setNewStatusColor("#1976d2");
+  };
+
+  const setExtraInfoValueHelper = (extraInfo, fieldName, value) => {
+    if (!extraInfo || !Array.isArray(extraInfo)) extraInfo = [];
+    const newExtraInfo = [...extraInfo];
+    const idx = newExtraInfo.findIndex((info) => info.name?.toLowerCase() === fieldName.toLowerCase());
+    if (idx !== -1) {
+      newExtraInfo[idx] = { ...newExtraInfo[idx], value };
+    } else {
+      newExtraInfo.push({ name: fieldName, value });
+    }
+    return newExtraInfo;
+  };
+
+  // Preencher form de contato quando o ticket carrega
+  useEffect(() => {
+    const contact = ticket?.contact;
+    if (contact?.id) {
+      const extra = contact.extraInfo || [];
+      const productsRaw = getExtraInfoValue(extra, "produtos_interesse");
+      setContactFormData({
+        name: contact.name || "",
+        email: contact.email || "",
+        country: getExtraInfoValue(extra, "pais") || "",
+        city: getExtraInfoValue(extra, "cidade") || "",
+        state: getExtraInfoValue(extra, "estado") || "",
+        leadOrigin: getExtraInfoValue(extra, "origem_lead") || "",
+        entryDate: getExtraInfoValue(extra, "data_entrada") || "",
+        exitDate: getExtraInfoValue(extra, "data_saida") || "",
+        dealValue: getExtraInfoValue(extra, "valor_negocio") || "0,00",
+        company: getExtraInfoValue(extra, "empresa") || "",
+        position: getExtraInfoValue(extra, "cargo") || "",
+        productInput: "",
+        products: productsRaw ? productsRaw.split(",").map((p) => p.trim()).filter(Boolean) : [],
+        observation: getExtraInfoValue(extra, "observacao") || "",
+      });
+    }
+  }, [ticket]);
+
+  const handleContactFieldChange = (field, value) => {
+    setContactFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleContactSaveField = async (field) => {
+    const contact = ticket?.contact;
+    if (!contact?.id) return;
+    setContactFormSaving(true);
+    try {
+      let updateData = {};
+      let extraInfo = contact.extraInfo ? [...contact.extraInfo] : [];
+      if (field === "name") {
+        updateData.name = contactFormData.name;
+      } else if (field === "email") {
+        updateData.email = contactFormData.email;
+      } else {
+        const extraFieldMap = {
+          country: "pais", city: "cidade", state: "estado",
+          leadOrigin: "origem_lead", entryDate: "data_entrada",
+          exitDate: "data_saida", dealValue: "valor_negocio",
+          company: "empresa", position: "cargo",
+          products: "produtos_interesse", observation: "observacao",
+        };
+        const extraName = extraFieldMap[field];
+        if (extraName) {
+          const value = field === "products" ? contactFormData.products.join(", ") : contactFormData[field];
+          extraInfo = setExtraInfoValueHelper(extraInfo, extraName, value);
+          updateData.extraInfo = extraInfo;
+        }
+      }
+      await api.put(`/contacts/${contact.id}`, updateData);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Erro ao salvar campo.");
+    }
+    setContactFormSaving(false);
+  };
+
+  const handleContactAddProduct = () => {
+    const product = contactFormData.productInput.trim();
+    if (!product) return;
+    const newProducts = [...contactFormData.products, product];
+    setContactFormData((prev) => ({ ...prev, products: newProducts, productInput: "" }));
+    setTimeout(() => handleContactSaveField("products"), 100);
+  };
+
+  const handleContactRemoveProduct = (index) => {
+    const newProducts = contactFormData.products.filter((_, i) => i !== index);
+    setContactFormData((prev) => ({ ...prev, products: newProducts }));
+    setTimeout(() => handleContactSaveField("products"), 100);
   };
 
   const resolveImageUrl = (url) => {
@@ -888,6 +1048,290 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                 </Typography>
               )}
             </div>
+
+            {/* DADOS DO CONTATO */}
+            <Paper elevation={0} className={classes.contactSection}>
+              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 12 }}>
+                Dados do Contato
+              </Typography>
+
+              {/* Header com avatar + nome + telefone */}
+              <div className={classes.contactHeader}>
+                <Avatar
+                  className={classes.contactAvatar}
+                  src={resolveImageUrl(ticket?.contact?.urlPicture || ticket?.contact?.profilePicUrl)}
+                >
+                  {!ticket?.contact?.urlPicture && !ticket?.contact?.profilePicUrl && (
+                    <Person style={{ fontSize: 28 }} />
+                  )}
+                </Avatar>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="subtitle1" style={{ fontWeight: 600, lineHeight: 1.3 }} noWrap>
+                    {contactFormData.name || ticket?.contact?.name || "—"}
+                  </Typography>
+                  <div className={classes.contactPhoneRow}>
+                    <Typography variant="body2" color="textSecondary">
+                      {formatSerializedId(ticket?.contact?.number) || ticket?.contact?.number || "—"}
+                    </Typography>
+                    {ticket?.contact?.number && (
+                      <CopyToClipboard text={ticket.contact.number} onCopy={() => toast.success("Número copiado!")}>
+                        <Tooltip title="Copiar número">
+                          <IconButton size="small" style={{ padding: 2 }}>
+                            <FileCopy style={{ fontSize: 14 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </CopyToClipboard>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className={classes.contactFieldsGrid}>
+                {/* Nome */}
+                <TextField
+                  label="Nome"
+                  value={contactFormData.name}
+                  onChange={(e) => handleContactFieldChange("name", e.target.value)}
+                  onBlur={() => handleContactSaveField("name")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  InputProps={!readOnly ? {
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Create style={{ fontSize: 14, color: "#aaa" }} />
+                      </InputAdornment>
+                    ),
+                  } : undefined}
+                />
+
+                {/* Email */}
+                <TextField
+                  label="Email"
+                  value={contactFormData.email}
+                  onChange={(e) => handleContactFieldChange("email", e.target.value)}
+                  onBlur={() => handleContactSaveField("email")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  placeholder="Digite o email"
+                />
+
+                {/* País */}
+                <TextField
+                  label="País"
+                  value={contactFormData.country}
+                  onChange={(e) => handleContactFieldChange("country", e.target.value)}
+                  onBlur={() => handleContactSaveField("country")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  placeholder="País"
+                />
+
+                {/* Cidade */}
+                <TextField
+                  label="Cidade"
+                  value={contactFormData.city}
+                  onChange={(e) => handleContactFieldChange("city", e.target.value)}
+                  onBlur={() => handleContactSaveField("city")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  placeholder="Cidade"
+                />
+
+                {/* Estado */}
+                <TextField
+                  label="Estado"
+                  value={contactFormData.state}
+                  onChange={(e) => handleContactFieldChange("state", e.target.value)}
+                  onBlur={() => handleContactSaveField("state")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  placeholder="Estado"
+                />
+
+                {/* Origem do Lead */}
+                <FormControl variant="outlined" size="small" fullWidth disabled={readOnly}>
+                  <InputLabel>Origem do lead</InputLabel>
+                  <Select
+                    value={contactFormData.leadOrigin}
+                    onChange={(e) => {
+                      handleContactFieldChange("leadOrigin", e.target.value);
+                      setTimeout(() => handleContactSaveField("leadOrigin"), 100);
+                    }}
+                    label="Origem do lead"
+                  >
+                    <MenuItem value=""><em>Selecione</em></MenuItem>
+                    <MenuItem value="whatsapp">WhatsApp</MenuItem>
+                    <MenuItem value="facebook">Facebook</MenuItem>
+                    <MenuItem value="instagram">Instagram</MenuItem>
+                    <MenuItem value="site">Site</MenuItem>
+                    <MenuItem value="indicacao">Indicação</MenuItem>
+                    <MenuItem value="google">Google</MenuItem>
+                    <MenuItem value="outro">Outro</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <Typography className={classes.contactSectionTitle}>
+                  Datas
+                </Typography>
+
+                {/* Data de entrada */}
+                <TextField
+                  label="Data de entrada"
+                  type="date"
+                  value={contactFormData.entryDate}
+                  onChange={(e) => handleContactFieldChange("entryDate", e.target.value)}
+                  onBlur={() => handleContactSaveField("entryDate")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  InputLabelProps={{ shrink: true }}
+                />
+
+                {/* Data de saída */}
+                <TextField
+                  label="Data de saída"
+                  type="date"
+                  value={contactFormData.exitDate}
+                  onChange={(e) => handleContactFieldChange("exitDate", e.target.value)}
+                  onBlur={() => handleContactSaveField("exitDate")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  InputLabelProps={{ shrink: true }}
+                />
+
+                <Typography className={classes.contactSectionTitle}>
+                  Negócio
+                </Typography>
+
+                {/* Valor do Negócio */}
+                <TextField
+                  label="Valor do Negócio"
+                  value={contactFormData.dealValue}
+                  onChange={(e) => handleContactFieldChange("dealValue", e.target.value)}
+                  onBlur={() => handleContactSaveField("dealValue")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">R$</InputAdornment>,
+                  }}
+                />
+
+                {/* Empresa */}
+                <TextField
+                  label="Empresa"
+                  value={contactFormData.company}
+                  onChange={(e) => handleContactFieldChange("company", e.target.value)}
+                  onBlur={() => handleContactSaveField("company")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  placeholder="Empresa"
+                />
+
+                {/* Cargo */}
+                <TextField
+                  label="Cargo"
+                  value={contactFormData.position}
+                  onChange={(e) => handleContactFieldChange("position", e.target.value)}
+                  onBlur={() => handleContactSaveField("position")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  disabled={readOnly}
+                  placeholder="Cargo"
+                />
+
+                <Typography className={classes.contactSectionTitle}>
+                  Produtos de Interesse
+                </Typography>
+
+                {/* Produtos - input só no modo edição */}
+                {!readOnly && (
+                  <div className={classes.contactFieldFull} style={{ display: "flex", gap: 8 }}>
+                    <TextField
+                      label="Produto"
+                      value={contactFormData.productInput}
+                      onChange={(e) => handleContactFieldChange("productInput", e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); handleContactAddProduct(); }
+                      }}
+                      variant="outlined"
+                      size="small"
+                      fullWidth
+                      placeholder="Digite um produto"
+                    />
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      size="small"
+                      onClick={handleContactAddProduct}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      Inserir
+                    </Button>
+                  </div>
+                )}
+
+                {contactFormData.products.length > 0 && (
+                  <div className={classes.contactChipContainer}>
+                    {contactFormData.products.map((product, pIdx) => (
+                      <span key={pIdx} className={classes.contactProductChip}>
+                        {product}
+                        {!readOnly && (
+                          <Close
+                            style={{ fontSize: 14, cursor: "pointer" }}
+                            onClick={() => handleContactRemoveProduct(pIdx)}
+                          />
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {contactFormData.products.length === 0 && readOnly && (
+                  <Typography variant="body2" color="textSecondary" className={classes.contactFieldFull}>
+                    Nenhum produto cadastrado.
+                  </Typography>
+                )}
+
+                <Typography className={classes.contactSectionTitle}>
+                  Observações
+                </Typography>
+
+                {/* Observações */}
+                <TextField
+                  className={classes.contactFieldFull}
+                  value={contactFormData.observation}
+                  onChange={(e) => handleContactFieldChange("observation", e.target.value)}
+                  onBlur={() => handleContactSaveField("observation")}
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  multiline
+                  rows={3}
+                  disabled={readOnly}
+                  placeholder="Digite uma observação"
+                />
+              </div>
+            </Paper>
+
+            <Divider style={{ marginBottom: 16 }} />
 
             <Paper elevation={0} className={classes.editorCard}>
               {readOnly ? (

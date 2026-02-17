@@ -16,6 +16,8 @@ import Select from "@material-ui/core/Select";
 import InputLabel from "@material-ui/core/InputLabel";
 import FormControl from "@material-ui/core/FormControl";
 import InputAdornment from "@material-ui/core/InputAdornment";
+import Tabs from "@material-ui/core/Tabs";
+import Tab from "@material-ui/core/Tab";
 
 import ChatIcon from "@material-ui/icons/Chat";
 import FlashOnIcon from "@material-ui/icons/FlashOn";
@@ -116,6 +118,17 @@ const useStyles = makeStyles((theme) => ({
 		padding: 4,
 		color: theme.palette.primary.main,
 	},
+	tabsRoot: {
+		borderBottom: "1px solid rgba(0, 0, 0, 0.12)",
+		minHeight: 36,
+		backgroundColor: "#fff",
+	},
+	tab: {
+		minHeight: 36,
+		textTransform: "none",
+		fontWeight: 600,
+		fontSize: 13,
+	},
 	formSection: {
 		padding: "8px 16px 16px",
 		display: "flex",
@@ -208,6 +221,7 @@ const ContactDrawer = ({ open, handleDrawerClose, contact, ticket, loading }) =>
 
 	const [editingField, setEditingField] = useState(null);
 	const [saving, setSaving] = useState(false);
+	const [activeTab, setActiveTab] = useState(0);
 
 	useEffect(() => {
 		async function fetchData() {
@@ -426,9 +440,20 @@ const ContactDrawer = ({ open, handleDrawerClose, contact, ticket, loading }) =>
 							</div>
 						</div>
 
-						<Divider />
+						<Tabs
+							value={activeTab}
+							onChange={(_, v) => setActiveTab(v)}
+							indicatorColor="primary"
+							textColor="primary"
+							variant="fullWidth"
+							className={classes.tabsRoot}
+						>
+							<Tab label="Detalhes do Contato" className={classes.tab} />
+							<Tab label="Detalhes do Ticket" className={classes.tab} />
+						</Tabs>
 
-						{/* FORM FIELDS */}
+						{/* ===== ABA 0: DETALHES DO CONTATO ===== */}
+						{activeTab === 0 && (
 						<div className={classes.formSection}>
 							<Typography className={classes.sectionTitle}>
 								Dados do Contato
@@ -670,22 +695,6 @@ const ContactDrawer = ({ open, handleDrawerClose, contact, ticket, loading }) =>
 
 							<Divider style={{ margin: "4px 0" }} />
 
-							{/* Etapa Kanban */}
-							<Typography className={classes.sectionTitle}>
-								Etapa Kanban
-							</Typography>
-							<TagsKanbanContainer ticket={ticket} />
-
-							<Divider style={{ margin: "4px 0" }} />
-
-							{/* Observações do Ticket */}
-							<Typography className={classes.sectionTitle}>
-								Observações do Ticket
-							</Typography>
-							<ContactNotes ticket={ticket} />
-
-							<Divider style={{ margin: "4px 0" }} />
-
 							{/* Observações gerais */}
 							<Typography className={classes.sectionTitle}>
 								Observações
@@ -702,6 +711,100 @@ const ContactDrawer = ({ open, handleDrawerClose, contact, ticket, loading }) =>
 								placeholder="Digite uma observação"
 							/>
 						</div>
+						)}
+
+						{/* ===== ABA 1: DETALHES DO TICKET ===== */}
+						{activeTab === 1 && (
+						<div className={classes.formSection}>
+							{/* Etapa Kanban */}
+							<Typography className={classes.sectionTitle}>
+								Etapa Kanban
+							</Typography>
+							<TagsKanbanContainer ticket={ticket} />
+
+							<Divider style={{ margin: "4px 0" }} />
+
+							{/* Observações do Ticket */}
+							<Typography className={classes.sectionTitle}>
+								Observações do Ticket
+							</Typography>
+							<ContactNotes ticket={ticket} />
+
+							<Divider style={{ margin: "4px 0" }} />
+
+							{/* Info do Ticket */}
+							<Typography className={classes.sectionTitle}>
+								Informações do Ticket
+							</Typography>
+
+							<TextField
+								label="Protocolo"
+								value={ticket?.id || ""}
+								variant="outlined"
+								size="small"
+								fullWidth
+								InputProps={{ readOnly: true }}
+							/>
+
+							<TextField
+								label="Fila"
+								value={ticket?.queue?.name || "Sem fila"}
+								variant="outlined"
+								size="small"
+								fullWidth
+								InputProps={{ readOnly: true }}
+							/>
+
+							<TextField
+								label="Atendente"
+								value={ticket?.user?.name || "Sem atendente"}
+								variant="outlined"
+								size="small"
+								fullWidth
+								InputProps={{ readOnly: true }}
+							/>
+
+							<TextField
+								label="Conexão"
+								value={ticket?.whatsapp?.name || "—"}
+								variant="outlined"
+								size="small"
+								fullWidth
+								InputProps={{ readOnly: true }}
+							/>
+
+							<TextField
+								label="Status do Ticket"
+								value={ticket?.status || "—"}
+								variant="outlined"
+								size="small"
+								fullWidth
+								InputProps={{ readOnly: true }}
+							/>
+
+							{ticket?.createdAt && (
+								<TextField
+									label="Criado em"
+									value={new Date(ticket.createdAt).toLocaleString("pt-BR")}
+									variant="outlined"
+									size="small"
+									fullWidth
+									InputProps={{ readOnly: true }}
+								/>
+							)}
+
+							{ticket?.updatedAt && (
+								<TextField
+									label="Última atualização"
+									value={new Date(ticket.updatedAt).toLocaleString("pt-BR")}
+									variant="outlined"
+									size="small"
+									fullWidth
+									InputProps={{ readOnly: true }}
+								/>
+							)}
+						</div>
+						)}
 					</div>
 				)}
 			</Drawer>
