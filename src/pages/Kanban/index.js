@@ -271,6 +271,21 @@ const getContactImageUrl = (contact) => {
   return resolved.replace(/:443(?=\/)/, "");
 };
 
+// Ícone do card: só foto do contato (WhatsApp primeiro). Nunca usar capa do quadro.
+const getAvatarUrlForCard = (ticket) => {
+  const contact = ticket?.contact;
+  const capa = ticket?.quadroCapaUrl || ticket?.capaUrl;
+  const profilePicUrl = contact?.profilePicUrl;
+  const urlPicture = contact?.urlPicture;
+  let url = profilePicUrl || (urlPicture && (!capa || urlPicture !== capa) ? urlPicture : null);
+  if (!url || typeof url !== "string") return null;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    const base = process.env.REACT_APP_BACKEND_URL || "";
+    url = base + (url.startsWith("/") ? url : "/" + url);
+  }
+  return url.replace(/:443(?=\/)/, "");
+};
+
 // Thumbnail do card: capa do quadro se existir, senão foto do contato
 const getCardImageUrl = (ticket) => {
   const capa = ticket?.quadroCapaUrl || ticket?.capaUrl;
@@ -375,7 +390,22 @@ const Kanban = () => {
         params.quadroGroupId = selectedQuadroGroupId;
       }
       const { data } = await api.get("/ticket/kanban", { params });
-      setTickets(data.tickets || []);
+      const list = data.tickets || [];
+      console.log("[Kanban fetchTickets] raw count:", list.length, "tickets:", list.map((t) => ({ id: t.id, uuid: t.uuid, contact: t.contact?.name })));
+      const seen = new Set();
+      const duplicados = [];
+      const unicos = list.filter((t) => {
+        const key = t.id != null ? t.id : t.uuid;
+        if (key == null || seen.has(key)) {
+          if (key != null && seen.has(key)) duplicados.push(key);
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+      if (duplicados.length) console.log("[Kanban fetchTickets] ids duplicados removidos:", duplicados);
+      console.log("[Kanban fetchTickets] após dedup:", unicos.length, "ids:", unicos.map((t) => t.id));
+      setTickets(unicos);
     } catch (err) {
       console.log(err);
       setTickets([]);
@@ -677,6 +707,8 @@ const Kanban = () => {
     })),
   ];
 
+  console.log("[Kanban lanes]", lanes.map((l) => ({ id: l.id, title: l.title, count: l.tickets.length, ticketIds: l.tickets.map((t) => t.id) })));
+
   const otherGroups = quadroGroups.filter((g) => String(g.id) !== String(selectedQuadroGroupId));
 
   return (
@@ -865,7 +897,7 @@ const Kanban = () => {
                   <div className={classes.cardHeader}>
                     <Avatar
                       className={classes.cardAvatar}
-                      src={getCardImageUrl(ticket)}
+                      src={getAvatarUrlForCard(ticket)}
                       alt={ticket.contact?.name}
                     >
                       {(ticket.contact?.name || "?").charAt(0).toUpperCase()}
