@@ -10,6 +10,11 @@ Este documento reúne **tudo** que o backend precisa implementar para o Quadro K
 - **Excluir anexo:** o front chama **DELETE** `/tickets/:ticketId/quadro/attachments/:attachmentId` (com `ticketId` numérico). Implementar remoção do registro e, se quiser, do arquivo.
 - **Thumbnail no card:** na resposta de **GET /ticket/kanban**, opcionalmente incluir em cada ticket o campo `quadroCapaUrl` (ou `capaUrl`) com a URL do anexo marcado como capa do quadro, para o card exibir a capa em vez da foto do contato.
 - **Nome do Projeto no card:** na listagem **GET /ticket/kanban**, incluir em cada ticket o campo `nomeProjeto` (ou `nomeEmpresa` / `quadroNomeProjeto`) quando o quadro tiver esse dado preenchido, para exibir no card acima do nome do contato.
+- **Campos personalizados:** no Quadro, aceitar e persistir `customFields` (array de `{ name, value, type: "text"|"link" }`). No GET do quadro e na listagem **GET /ticket/kanban** retornar `customFields`. Na listagem, incluir por ticket `quadroValorServico`, `quadroValorEntrada` e `quadroCustomFields` para o card exibir valores e "Falta pagar" + campos personalizados.
+- **Compartilhar card com outras áreas (grupos de quadro):**
+  - **GET /quadro-groups** — listar áreas (ex.: Produção, Financeiro, Designer). Resposta: `{ groups: [{ id, name }] }` ou `{ lista: [...] }`. O front usa fallback local se o endpoint não existir.
+  - **GET /ticket/kanban** — aceitar query `quadroGroupId`; retornar apenas tickets que pertencem ou estão compartilhados com essa área. Em cada ticket, incluir `quadroSharedGroupIds` (ou `sharedQuadroGroupIds`) com os ids das áreas onde o card está compartilhado.
+  - **POST /tickets/:ticketId/quadro/share** — body `{ groupIds: [2, 3] }`. Associar o ticket às áreas indicadas (além da área de origem). Assim o mesmo card aparece em Produção, Financeiro, Designer etc.; alterações no quadro (status, valores, campos) são do ticket e refletem em todas as áreas.
 
 ---
 
@@ -97,6 +102,7 @@ quadro / ticket_quadro
 - valorServico (decimal, nullable)  // valor do serviço
 - valorEntrada (decimal, nullable)  // valor de entrada; saldo = valorServico - valorEntrada
 - nomeProjeto (string, nullable)    // nome do projeto/empresa (exibido no card e editável no modal)
+- customFields (JSON, nullable)     // array de { name, value, type: "text"|"link" } (ex.: Nome da fonte, Endereço, links)
 - createdAt, updatedAt
 ```
 
@@ -167,6 +173,10 @@ Carrega tudo para abrir o modal Quadro (ticket, quadro, anexos).
     "valorServico": 1500.00,
     "valorEntrada": 500.00,
     "nomeProjeto": "Placa RF Personalizados",
+    "customFields": [
+      { "name": "Nome da fonte", "value": "Fonte X", "type": "text" },
+      { "name": "Link da arte", "value": "https://...", "type": "link" }
+    ],
     "updatedAt": "2026-02-16T18:54:34.670Z"
   },
   "attachments": [
@@ -270,11 +280,15 @@ Usado pelo front para salvar **Valor do Serviço** e **Valor de Entrada** (saldo
 {
   "valorServico": 1500.00,
   "valorEntrada": 500.00,
-  "nomeProjeto": "Placa RF Personalizados"
+  "nomeProjeto": "Placa RF Personalizados",
+  "customFields": [
+    { "name": "Nome da fonte", "value": "Fonte X", "type": "text" },
+    { "name": "Link da arte", "value": "https://...", "type": "link" }
+  ]
 }
 ```
 
-- Atualizar no registro do Quadro os campos `valorServico`, `valorEntrada` e `nomeProjeto` (opcional).
+- Atualizar no registro do Quadro os campos `valorServico`, `valorEntrada`, `nomeProjeto` e `customFields` (opcional).
 - Aceitar apenas esses campos neste endpoint ou estender o payload conforme sua API (ex.: aceitar também `description`/`status` no mesmo PUT).
 
 **Response 200** (objeto quadro atualizado) ou 204.
@@ -350,7 +364,7 @@ Para exibir “Histórico” de mudanças de coluna no modal.
 | Abrir modal Quadro | GET | `/tickets/:ticketUuid/quadro` | - |
 | Salvar status do quadro | PUT | `/tickets/:ticketUuid/quadro/status` | `{ "status": "..." }` |
 | Salvar descrição | PUT | `/tickets/:ticketUuid/quadro/description` | `{ "description": "<p>...</p>" }` |
-| Salvar valores e nome do projeto | PUT | `/tickets/:ticketId/quadro` | `{ "valorServico", "valorEntrada", "nomeProjeto"? }` |
+| Salvar valores, nome e campos | PUT | `/tickets/:ticketId/quadro` | `{ "valorServico", "valorEntrada", "nomeProjeto"?,"customFields"? }` |
 | Upload anexo | POST | `/tickets/:ticketUuid/quadro/attachments` | multipart, campo `file` |
 | Marcar anexo como capa | PATCH | `/tickets/:ticketUuid/quadro/attachments/:attachmentId/capa` | - |
 | Excluir anexo | DELETE | `/tickets/:ticketId/quadro/attachments/:attachmentId` | - |
@@ -377,14 +391,14 @@ Garantir ainda que **GET /ticket/kanban** devolva em cada ticket `contact.urlPic
 
 ## 7. Checklist final
 
-- [ ] **GET /ticket/kanban** – em cada ticket, `contact` com `urlPicture` ou `profilePicUrl`; opcionalmente `quadroCapaUrl` (ou `capaUrl`) para thumbnail da capa; opcionalmente `nomeProjeto` (ou `nomeEmpresa`/`quadroNomeProjeto`) para nome do projeto no card.
-- [ ] Tabela Quadro (ticketId, status, description, valorServico, valorEntrada, nomeProjeto).
+- [ ] **GET /ticket/kanban** – em cada ticket, `contact` com `urlPicture` ou `profilePicUrl`; opcionalmente `quadroCapaUrl`, `nomeProjeto`, `quadroValorServico`, `quadroValorEntrada`, `quadroCustomFields` para o card.
+- [ ] Tabela Quadro (ticketId, status, description, valorServico, valorEntrada, nomeProjeto, customFields JSON).
 - [ ] Tabela QuadroAnexo (ticketId, name, path, isCapa).
 - [ ] Tabela QuadroStatusLog (ticketId, fromLaneId, toLaneId, userId, createdAt).
 - [ ] **GET** `/tickets/:ticketUuid/quadro` → ticket + quadro (com valorServico, valorEntrada) + attachments.
 - [ ] **PUT** `/tickets/:ticketUuid/quadro/status`.
 - [ ] **PUT** `/tickets/:ticketUuid/quadro/description`.
-- [ ] **PUT** `/tickets/:ticketId/quadro` com body `{ valorServico, valorEntrada, nomeProjeto? }`.
+- [ ] **PUT** `/tickets/:ticketId/quadro` com body `{ valorServico, valorEntrada, nomeProjeto?, customFields? }`.
 - [ ] **POST** `/tickets/:ticketUuid/quadro/attachments` (multipart).
 - [ ] **PATCH** `/tickets/:ticketUuid/quadro/attachments/:id/capa`.
 - [ ] **DELETE** `/tickets/:ticketId/quadro/attachments/:id`.

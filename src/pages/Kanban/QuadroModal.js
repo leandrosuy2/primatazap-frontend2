@@ -30,6 +30,7 @@ import FormatListBulleted from "@material-ui/icons/FormatListBulleted";
 import Add from "@material-ui/icons/Add";
 import AttachFile from "@material-ui/icons/AttachFile";
 import Delete from "@material-ui/icons/Delete";
+import Share from "@material-ui/icons/Share";
 import History from "@material-ui/icons/History";
 import api from "../../services/api";
 import { format, parseISO } from "date-fns";
@@ -263,7 +264,7 @@ function getStatusColor(label) {
   return "#d32f2f";
 }
 
-export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true }) {
+export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true, onOpenShare }) {
   const classes = useStyles();
   useContext(AuthContext);
   const editorRef = useRef(null);
@@ -290,6 +291,7 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
   const [valorServico, setValorServico] = useState(0);
   const [valorEntrada, setValorEntrada] = useState(0);
   const [nomeProjeto, setNomeProjeto] = useState("");
+  const [customFields, setCustomFields] = useState([]);
 
   const resolveImageUrl = (url) => {
     if (!url || typeof url !== "string") return null;
@@ -318,10 +320,13 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
           setValorServico(Number(quadroData.quadro.valorServico) || 0);
           setValorEntrada(Number(quadroData.quadro.valorEntrada) || 0);
           setNomeProjeto(quadroData.quadro.nomeProjeto || quadroData.quadro.nomeEmpresa || "");
+          const cf = quadroData.quadro.customFields;
+          setCustomFields(Array.isArray(cf) ? cf.map((f) => ({ name: f.name || "", value: f.value || "", type: f.type || "text" })) : []);
         } else {
           setValorServico(0);
           setValorEntrada(0);
           setNomeProjeto("");
+          setCustomFields([]);
         }
         if (Array.isArray(quadroData.attachments)) {
           quadroAttachments = quadroData.attachments.map((a) => ({
@@ -376,6 +381,7 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
       setValorServico(0);
       setValorEntrada(0);
       setNomeProjeto("");
+      setCustomFields([]);
       setEditMode(false);
       setChangeClientOpen(false);
       setRunnerTop(null);
@@ -522,12 +528,24 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
   const handleSaveValores = async () => {
     if (!ticket?.id) return;
     try {
-      await api.put("/tickets/" + ticket.id + "/quadro", { valorServico, valorEntrada, nomeProjeto: nomeProjeto || undefined });
-      toast.success("Valores e nome salvos.");
+      const payload = {
+        valorServico,
+        valorEntrada,
+        nomeProjeto: nomeProjeto || undefined,
+        customFields: customFields.filter((f) => (f.name || "").trim()).map((f) => ({ name: (f.name || "").trim(), value: (f.value || "").trim(), type: f.type || "text" })),
+      };
+      await api.put("/tickets/" + ticket.id + "/quadro", payload);
+      toast.success("Valores, nome e campos salvos.");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Erro ao salvar.");
     }
   };
+
+  const addCustomField = () => setCustomFields((prev) => [...prev, { name: "", value: "", type: "text" }]);
+  const updateCustomField = (index, field, key, value) => {
+    setCustomFields((prev) => prev.map((f, i) => (i === index ? { ...f, [key]: value } : f)));
+  };
+  const removeCustomField = (index) => setCustomFields((prev) => prev.filter((_, i) => i !== index));
 
   useEffect(() => {
     if (!readOnly && changeClientOpen && contactSearch.length >= 2) {
@@ -634,6 +652,13 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
           >
             {refreshing ? "Atualizando…" : "Atualizar"}
           </Button>
+        )}
+        {onOpenShare && ticket && (
+          <Tooltip title="Compartilhar com outras áreas (Financeiro, Designer, etc.)">
+            <Button size="small" startIcon={<Share />} onClick={() => onOpenShare(ticket)} style={{ marginRight: 8 }}>
+              Compartilhar
+            </Button>
+          </Tooltip>
         )}
         <IconButton onClick={onClose} size="small" aria-label="Fechar">
           <Close />
@@ -760,14 +785,68 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
                   disabled={readOnly}
                 />
                 <Typography variant="body1" style={{ fontWeight: 600 }}>
-                  Saldo restante: R$ {(Number(valorServico) - Number(valorEntrada)).toFixed(2)}
+                  Falta o cliente pagar: R$ {(Number(valorServico) - Number(valorEntrada)).toFixed(2)}
                 </Typography>
                 {!readOnly && (
                   <Button variant="outlined" size="small" startIcon={<Save />} onClick={handleSaveValores}>
-                    Salvar valores e nome
+                    Salvar valores, nome e campos
                   </Button>
                 )}
               </Box>
+            </Paper>
+
+            <Paper elevation={0} style={{ padding: 16, marginBottom: 16 }}>
+              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 12 }}>Campos personalizados</Typography>
+              <Typography variant="caption" color="textSecondary" display="block" style={{ marginBottom: 12 }}>
+                Ex.: Nome da fonte, Nome da lente, Endereço, links, etc.
+              </Typography>
+              {customFields.map((field, index) => (
+                <Box key={index} display="flex" alignItems="center" gap={1} flexWrap="wrap" style={{ marginBottom: 8 }}>
+                  <TextField
+                    size="small"
+                    placeholder="Nome do campo (ex: Nome da fonte)"
+                    value={field.name}
+                    onChange={(e) => updateCustomField(index, field, "name", e.target.value)}
+                    disabled={readOnly}
+                    style={{ minWidth: 160 }}
+                  />
+                  <TextField
+                    size="small"
+                    placeholder={field.type === "link" ? "URL (https://...)" : "Valor"}
+                    value={field.value}
+                    onChange={(e) => updateCustomField(index, field, "value", e.target.value)}
+                    disabled={readOnly}
+                    style={{ flex: 1, minWidth: 120 }}
+                  />
+                  {!readOnly && (
+                    <>
+                      <FormControl size="small" style={{ minWidth: 90 }}>
+                        <Select
+                          value={field.type || "text"}
+                          onChange={(e) => updateCustomField(index, field, "type", e.target.value)}
+                          displayEmpty
+                        >
+                          <MenuItem value="text">Texto</MenuItem>
+                          <MenuItem value="link">Link</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <IconButton size="small" onClick={() => removeCustomField(index)} color="secondary" title="Remover campo">
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </>
+                  )}
+                </Box>
+              ))}
+              {!readOnly && (
+                <Button variant="outlined" size="small" startIcon={<Add />} onClick={addCustomField} style={{ marginTop: 8 }}>
+                  Adicionar campo
+                </Button>
+              )}
+              {customFields.length > 0 && !readOnly && (
+                <Button variant="outlined" size="small" startIcon={<Save />} onClick={handleSaveValores} style={{ marginLeft: 8, marginTop: 8 }}>
+                  Salvar campos
+                </Button>
+              )}
             </Paper>
 
             <Paper elevation={0} className={classes.attachmentsSection}>

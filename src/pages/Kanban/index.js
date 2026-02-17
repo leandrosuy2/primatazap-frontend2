@@ -9,6 +9,16 @@ import {
   Avatar,
   Button,
   Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  FormControlLabel,
+  Checkbox,
+  InputLabel,
+  Select,
+  MenuItem,
   IconButton,
   TextField,
   Paper,
@@ -18,6 +28,7 @@ import WhatsApp from "@material-ui/icons/WhatsApp";
 import Edit from "@material-ui/icons/Edit";
 import Delete from "@material-ui/icons/Delete";
 import Visibility from "@material-ui/icons/Visibility";
+import Share from "@material-ui/icons/Share";
 import { format } from "date-fns";
 import { Can } from "../../components/Can";
 import KanbanChatModal from "./KanbanChatModal";
@@ -201,6 +212,24 @@ const useStyles = makeStyles((theme) => ({
       color: "#fff",
     },
   },
+  cardBody: {
+    padding: theme.spacing(0.75, 1.25),
+    borderTop: "1px solid",
+    borderColor: theme.palette.divider,
+    "& > div": { marginBottom: 4 },
+    "& > div:last-child": { marginBottom: 0 },
+  },
+  cardBodyLine: {
+    fontSize: "0.7rem",
+    color: theme.palette.text.secondary,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  cardBodyLabel: {
+    fontWeight: 600,
+    color: theme.palette.text.primary,
+  },
   cardActions: {
     display: "flex",
     alignItems: "center",
@@ -276,12 +305,45 @@ const Kanban = () => {
   const [draggingColumnId, setDraggingColumnId] = useState(null);
   const [dragOverColumnId, setDragOverColumnId] = useState(null);
   const [editColumnTag, setEditColumnTag] = useState(null);
+  const [quadroGroups, setQuadroGroups] = useState([]);
+  const [selectedQuadroGroupId, setSelectedQuadroGroupId] = useState(null);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareModalTicket, setShareModalTicket] = useState(null);
+  const [shareModalSelectedIds, setShareModalSelectedIds] = useState([]);
+  const [shareModalSaving, setShareModalSaving] = useState(false);
 
   const queueIds = user.queues.map((q) => q.UserQueue.queueId);
 
   useEffect(() => {
     fetchTags();
   }, [user]);
+
+  useEffect(() => {
+    const loadQuadroGroups = async () => {
+      try {
+        const { data } = await api.get("/quadro-groups");
+        const list = data.groups || data.lista || data || [];
+        setQuadroGroups(Array.isArray(list) ? list : []);
+        if (list.length > 0 && selectedQuadroGroupId == null) {
+          setSelectedQuadroGroupId(String(list[0].id));
+        }
+      } catch (err) {
+        setQuadroGroups([
+          { id: 1, name: "Produção" },
+          { id: 2, name: "Financeiro" },
+          { id: 3, name: "Designer" },
+        ]);
+        if (selectedQuadroGroupId == null) setSelectedQuadroGroupId("1");
+      }
+    };
+    loadQuadroGroups();
+  }, []);
+
+  useEffect(() => {
+    if (quadroGroups.length > 0 && selectedQuadroGroupId == null) {
+      setSelectedQuadroGroupId(String(quadroGroups[0].id));
+    }
+  }, [quadroGroups]);
 
   const fetchTags = async () => {
     try {
@@ -295,13 +357,15 @@ const Kanban = () => {
 
   const fetchTickets = async () => {
     try {
-      const { data } = await api.get("/ticket/kanban", {
-        params: {
-          queueIds: JSON.stringify(queueIds),
-          startDate,
-          endDate,
-        },
-      });
+      const params = {
+        queueIds: JSON.stringify(queueIds),
+        startDate,
+        endDate,
+      };
+      if (selectedQuadroGroupId != null && selectedQuadroGroupId !== "") {
+        params.quadroGroupId = selectedQuadroGroupId;
+      }
+      const { data } = await api.get("/ticket/kanban", { params });
       setTickets(data.tickets || []);
     } catch (err) {
       console.log(err);
@@ -324,7 +388,43 @@ const Kanban = () => {
     };
   }, [socket, startDate, endDate]);
 
+  useEffect(() => {
+    if (selectedQuadroGroupId != null && tags.length >= 0) fetchTickets();
+  }, [selectedQuadroGroupId]);
+
   const handleSearchClick = () => fetchTickets();
+
+  const handleOpenShare = (e, ticket) => {
+    e.stopPropagation();
+    setShareModalTicket(ticket);
+    const shared = ticket.quadroSharedGroupIds || ticket.sharedQuadroGroupIds || [];
+    const otherIds = quadroGroups.map((g) => String(g.id)).filter((id) => id !== String(selectedQuadroGroupId));
+    setShareModalSelectedIds(shared.map(String).filter((id) => otherIds.includes(id)));
+    setShareModalOpen(true);
+  };
+
+  const handleCloseShareModal = () => {
+    setShareModalOpen(false);
+    setShareModalTicket(null);
+    setShareModalSelectedIds([]);
+  };
+
+  const handleShareSave = async () => {
+    if (!shareModalTicket?.id) return;
+    setShareModalSaving(true);
+    try {
+      await api.post("/tickets/" + shareModalTicket.id + "/quadro/share", {
+        groupIds: shareModalSelectedIds.map(Number).filter((n) => !Number.isNaN(n)),
+      });
+      toast.success("Compartilhamento atualizado. As outras áreas verão as atualizações deste card.");
+      handleCloseShareModal();
+      fetchTickets();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Erro ao compartilhar.");
+    } finally {
+      setShareModalSaving(false);
+    }
+  };
   const handleStartDateChange = (e) => setStartDate(e.target.value);
   const handleEndDateChange = (e) => setEndDate(e.target.value);
   const handleAddColunas = () => history.push("/tagsKanban");
@@ -354,8 +454,19 @@ const Kanban = () => {
     const raw = e.dataTransfer.getData("application/json");
     if (!raw) return;
     try {
-      const { type, laneId: sourceLaneId } = JSON.parse(raw);
-      if (type !== "column" || sourceLaneId === LANE_EM_ABERTO || targetLaneId === LANE_EM_ABERTO || sourceLaneId === targetLaneId) return;
+      const data = JSON.parse(raw);
+      const { type, laneId: sourceLaneId, ticketId } = data;
+      // Se for arrasto de card, mover o card (getData só pode ser lido uma vez, então usamos os dados já parseados)
+      if (type !== "column") {
+        const cardSourceLaneId = data.sourceLaneId;
+        if (ticketId && cardSourceLaneId !== undefined) {
+          handleCardMove(ticketId, cardSourceLaneId, targetLaneId);
+        }
+        setDraggingTicketId(null);
+        setDragOverLaneId(null);
+        return;
+      }
+      if (sourceLaneId === LANE_EM_ABERTO || targetLaneId === LANE_EM_ABERTO || sourceLaneId === targetLaneId) return;
       const fromIdx = tags.findIndex((t) => String(t.id) === sourceLaneId);
       const toIdx = tags.findIndex((t) => String(t.id) === targetLaneId);
       if (fromIdx === -1 || toIdx === -1) return;
@@ -434,6 +545,7 @@ const Kanban = () => {
   };
 
   const handleCardMove = async (ticketId, sourceLaneId, targetLaneId) => {
+    console.log("[Kanban handleCardMove]", { ticketId, sourceLaneId, targetLaneId });
     if (sourceLaneId === targetLaneId) return;
     const fromLabel = lanes.find((l) => l.id === sourceLaneId)?.title || sourceLaneId;
     const toLabel = lanes.find((l) => l.id === targetLaneId)?.title || targetLaneId;
@@ -442,6 +554,7 @@ const Kanban = () => {
         await api.delete(`/ticket-tags/${ticketId}`);
         toast.success("Tag removida do ticket.");
       } else {
+        await api.delete(`/ticket-tags/${ticketId}`);
         await api.put(`/ticket-tags/${ticketId}/${targetLaneId}`);
         toast.success("Ticket movido com sucesso.");
       }
@@ -486,6 +599,7 @@ const Kanban = () => {
 
   const handleDragOver = (e, laneId) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
     setDragOverLaneId(laneId);
   };
@@ -498,6 +612,7 @@ const Kanban = () => {
 
   const handleDrop = (e, targetLaneId) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragOverLaneId(null);
     const raw = e.dataTransfer.getData("application/json");
     if (!raw) return;
@@ -516,7 +631,25 @@ const Kanban = () => {
     setDraggingTicketId(null);
   };
 
-  const ticketsEmAberto = tickets.filter((t) => !t.tags || t.tags.length === 0);
+  // Ordem fixa das colunas (tags) para decidir onde o ticket aparece
+  const tagIdsOrder = tags.map((t) => String(t.id));
+  // Cada ticket em UMA coluna: sem tag = Em aberto; com tag = coluna da última tag (na ordem das colunas), assim o movimento para 3ª/4ª coluna aparece certo
+  const getTicketLaneId = (t) => {
+    if (!t.tags || t.tags.length === 0) return null;
+    let lastIdx = -1;
+    let lastId = null;
+    for (const tt of t.tags) {
+      const id = String(tt.id);
+      const idx = tagIdsOrder.indexOf(id);
+      if (idx > lastIdx) {
+        lastIdx = idx;
+        lastId = id;
+      }
+    }
+    return lastId || tagIdsOrder[0];
+  };
+
+  const ticketsEmAberto = tickets.filter((t) => getTicketLaneId(t) === null);
 
   const lanes = [
     {
@@ -530,15 +663,31 @@ const Kanban = () => {
       id: String(tag.id),
       title: tag.name,
       headerColor: tag.color || "#1976d2",
-      tickets: tickets.filter((t) => t.tags && t.tags.some((tt) => tt.id === tag.id)),
+      tickets: tickets.filter((t) => getTicketLaneId(t) === String(tag.id)),
       statusLabel: tag.name,
     })),
   ];
+
+  const otherGroups = quadroGroups.filter((g) => String(g.id) !== String(selectedQuadroGroupId));
 
   return (
     <div className={classes.root}>
       <header className={classes.header}>
         <div className={classes.filters}>
+          {quadroGroups.length > 0 && (
+            <FormControl variant="outlined" size="small" className={classes.dateInput}>
+              <InputLabel>Área</InputLabel>
+              <Select
+                value={selectedQuadroGroupId ?? ""}
+                onChange={(e) => setSelectedQuadroGroupId(e.target.value)}
+                label="Área"
+              >
+                {quadroGroups.map((g) => (
+                  <MenuItem key={g.id} value={String(g.id)}>{g.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
           <TextField
             label="Data de início"
             type="date"
@@ -586,13 +735,55 @@ const Kanban = () => {
         />
       </header>
 
-      <div className={classes.columnsWrapper}>
+      <div
+        className={classes.columnsWrapper}
+        onDragOverCapture={(e) => {
+          if (draggingColumnId) return;
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "move";
+          const el = document.elementFromPoint(e.clientX, e.clientY);
+          const col = el && el.closest("[data-lane-id]");
+          if (col) setDragOverLaneId(col.getAttribute("data-lane-id"));
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setDragOverLaneId(null);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          const el = document.elementFromPoint(e.clientX, e.clientY);
+          const col = el && el.closest("[data-lane-id]");
+          const targetLaneId = col ? col.getAttribute("data-lane-id") : null;
+          setDragOverLaneId(null);
+          console.log("[Kanban drop] clientX:", e.clientX, "clientY:", e.clientY, "el:", el?.className, "col:", col?.getAttribute("data-lane-id"), "targetLaneId:", targetLaneId);
+          if (!targetLaneId) return;
+          const raw = e.dataTransfer.getData("application/json");
+          if (!raw) return;
+          try {
+            const data = JSON.parse(raw);
+            console.log("[Kanban drop] data:", data);
+            if (data.type === "column") {
+              handleColumnDrop(e, targetLaneId);
+              return;
+            }
+            const { ticketId, sourceLaneId } = data;
+            if (ticketId != null && sourceLaneId != null) {
+              console.log("[Kanban drop] handleCardMove ticketId:", ticketId, "sourceLaneId:", sourceLaneId, "targetLaneId:", targetLaneId);
+              handleCardMove(ticketId, sourceLaneId, targetLaneId);
+            }
+            setDraggingTicketId(null);
+          } catch (err) {
+            console.error(err);
+          }
+        }}
+      >
         {lanes.map((lane) => {
           const isTagColumn = lane.id !== LANE_EM_ABERTO;
           const tag = isTagColumn ? tags.find((t) => String(t.id) === lane.id) : null;
           return (
           <div
             key={lane.id}
+            data-lane-id={lane.id}
             className={`${classes.column} ${
               draggingColumnId === lane.id ? classes.columnDragging : ""
             } ${dragOverColumnId === lane.id ? classes.columnDropTarget : ""}`}
@@ -697,7 +888,49 @@ const Kanban = () => {
                       />
                     </div>
                   </div>
+                  {(ticket.quadroValorServico != null || ticket.quadroValorEntrada != null || (ticket.quadroCustomFields && ticket.quadroCustomFields.length > 0)) && (
+                    <div className={classes.cardBody}>
+                      {ticket.quadroValorServico != null && (
+                        <div className={classes.cardBodyLine}>
+                          <span className={classes.cardBodyLabel}>Valor do serviço:</span> R$ {Number(ticket.quadroValorServico).toFixed(2)}
+                        </div>
+                      )}
+                      {ticket.quadroValorEntrada != null && (
+                        <div className={classes.cardBodyLine}>
+                          <span className={classes.cardBodyLabel}>Entrada:</span> R$ {Number(ticket.quadroValorEntrada).toFixed(2)}
+                        </div>
+                      )}
+                      {(ticket.quadroValorServico != null || ticket.quadroValorEntrada != null) && (
+                        <div className={classes.cardBodyLine}>
+                          <span className={classes.cardBodyLabel}>Falta pagar:</span> R$ {(Number(ticket.quadroValorServico || 0) - Number(ticket.quadroValorEntrada || 0)).toFixed(2)}
+                        </div>
+                      )}
+                      {ticket.quadroCustomFields && ticket.quadroCustomFields.length > 0 && ticket.quadroCustomFields.map((f, i) => (
+                        f.name && (
+                          <div key={i} className={classes.cardBodyLine}>
+                            <span className={classes.cardBodyLabel}>{f.name}:</span>{" "}
+                            {f.type === "link" && (f.value || "").startsWith("http") ? (
+                              <a href={f.value} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline" }}>{f.value}</a>
+                            ) : (
+                              (f.value || "-")
+                            )}
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  )}
+                  {(ticket.quadroSharedGroupIds?.length > 0 || ticket.sharedQuadroGroupIds?.length > 0) && (
+                    <div style={{ padding: "4px 10px", fontSize: "0.65rem", color: "#666", borderTop: "1px solid #eee" }}>
+                      Compartilhado: {(ticket.quadroSharedGroupIds || ticket.sharedQuadroGroupIds || [])
+                        .map((id) => quadroGroups.find((g) => String(g.id) === String(id))?.name)
+                        .filter(Boolean)
+                        .join(", ") || "—"}
+                    </div>
+                  )}
                   <div className={classes.cardActions} data-no-drag>
+                    <IconButton size="small" className={classes.cardIconBtn} onClick={(e) => handleOpenShare(e, ticket)} title="Compartilhar com outras áreas">
+                      <Share fontSize="small" />
+                    </IconButton>
                     <IconButton size="small" className={classes.cardIconBtn} onClick={() => handleVerQuadro(ticket.uuid)} title="Ver Quadro">
                       <Visibility fontSize="small" />
                     </IconButton>
@@ -741,6 +974,14 @@ const Kanban = () => {
         }}
         ticketUuid={quadroModalTicketUuid}
         readOnly={quadroModalReadOnly}
+        onOpenShare={(t) => {
+          if (!t) return;
+          setShareModalTicket(t);
+          const shared = t.quadroSharedGroupIds || t.sharedQuadroGroupIds || [];
+          const otherIds = quadroGroups.map((g) => String(g.id)).filter((id) => id !== String(selectedQuadroGroupId));
+          setShareModalSelectedIds(shared.map(String).filter((id) => otherIds.includes(id)));
+          setShareModalOpen(true);
+        }}
       />
 
       <KanbanChatModal
@@ -756,6 +997,45 @@ const Kanban = () => {
           setQuadroModalOpen(true);
         }}
       />
+
+      <Dialog open={shareModalOpen} onClose={handleCloseShareModal} maxWidth="sm" fullWidth>
+        <DialogTitle>Compartilhar com outras áreas</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="textSecondary" style={{ marginBottom: 16 }}>
+            Este card aparecerá nas áreas marcadas. Alterações (status, valores, campos) feitas aqui serão vistas lá também.
+          </Typography>
+          {otherGroups.length === 0 ? (
+            <Typography variant="body2" color="textSecondary">Não há outras áreas configuradas.</Typography>
+          ) : (
+            <div>
+              {otherGroups.map((g) => (
+                <FormControlLabel
+                  key={g.id}
+                  control={
+                    <Checkbox
+                      checked={shareModalSelectedIds.includes(String(g.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setShareModalSelectedIds((prev) => [...prev, String(g.id)]);
+                        } else {
+                          setShareModalSelectedIds((prev) => prev.filter((id) => id !== String(g.id)));
+                        }
+                      }}
+                    />
+                  }
+                  label={g.name}
+                />
+              ))}
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseShareModal}>Cancelar</Button>
+          <Button onClick={handleShareSave} color="primary" variant="contained" disabled={shareModalSaving}>
+            {shareModalSaving ? "Salvando…" : "Salvar"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };
