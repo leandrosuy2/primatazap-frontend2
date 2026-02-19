@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useContext } from "react";
 import {
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   IconButton,
@@ -31,6 +32,7 @@ import Add from "@material-ui/icons/Add";
 import AttachFile from "@material-ui/icons/AttachFile";
 import Delete from "@material-ui/icons/Delete";
 import Share from "@material-ui/icons/Share";
+import SwapHoriz from "@material-ui/icons/SwapHoriz";
 import History from "@material-ui/icons/History";
 import Settings from "@material-ui/icons/Settings";
 import FiberManualRecord from "@material-ui/icons/FiberManualRecord";
@@ -46,6 +48,13 @@ import Avatar from "@material-ui/core/Avatar";
 import Person from "@material-ui/icons/Person";
 import FileCopy from "@material-ui/icons/FileCopy";
 import Create from "@material-ui/icons/Create";
+import ArrowBack from "@material-ui/icons/ArrowBack";
+import ArrowForward from "@material-ui/icons/ArrowForward";
+import ExpandMore from "@material-ui/icons/ExpandMore";
+import ExpandLess from "@material-ui/icons/ExpandLess";
+import CreateNewFolder from "@material-ui/icons/CreateNewFolder";
+import Folder from "@material-ui/icons/Folder";
+import ViewModule from "@material-ui/icons/ViewModule";
 import { CopyToClipboard } from "react-copy-to-clipboard";
 import api from "../../services/api";
 import { format, parseISO } from "date-fns";
@@ -212,6 +221,72 @@ const useStyles = makeStyles((theme) => ({
   },
   addAttachmentBtn: { marginTop: theme.spacing(1) },
   inputFile: { display: "none" },
+  attachmentCategoryHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: theme.spacing(1, 1.5),
+    backgroundColor: theme.palette.grey[100],
+    borderRadius: 8,
+    marginTop: theme.spacing(1),
+    cursor: "pointer",
+    "&:hover": { backgroundColor: theme.palette.grey[200] },
+  },
+  attachmentGroupHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: theme.spacing(1, 1.5),
+    backgroundColor: theme.palette.primary.main + "18",
+    borderRadius: 8,
+    marginTop: theme.spacing(1),
+    cursor: "pointer",
+    border: "1px solid",
+    borderColor: theme.palette.primary.main + "40",
+    "&:hover": { backgroundColor: theme.palette.primary.main + "22" },
+  },
+  attachmentItemClickable: {
+    cursor: "pointer",
+    "&:hover": { backgroundColor: theme.palette.action.hover },
+  },
+  lightboxBackdrop: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    zIndex: theme.zIndex.modal + 10,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lightboxCloseBtn: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    color: "#fff",
+    zIndex: 1,
+  },
+  lightboxNav: {
+    position: "absolute",
+    top: "50%",
+    transform: "translateY(-50%)",
+    color: "#fff",
+    zIndex: 1,
+  },
+  lightboxContent: {
+    maxWidth: "90vw",
+    maxHeight: "85vh",
+    objectFit: "contain",
+  },
+  lightboxCaption: {
+    color: "#fff",
+    marginTop: 12,
+    textAlign: "center",
+    padding: "0 48px",
+  },
   changeClientRow: { marginBottom: theme.spacing(2) },
   changeClientAutocomplete: { minWidth: 280 },
   contactSection: {
@@ -315,7 +390,38 @@ function getStatusColor(label, statusList) {
   return "#d32f2f";
 }
 
-export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true, onOpenShare }) {
+const ATTACHMENT_TYPE_ORDER = ["JPG", "PNG", "CDR", "PSD", "PDF", "Vídeos", "Áudios", "Outros"];
+const ATTACHMENT_TYPE_LABELS = { JPG: "JPG", PNG: "PNG", CDR: "CDR (Corel)", PSD: "PSD", PDF: "PDF", Vídeos: "Vídeos", Áudios: "Áudios", Outros: "Outros" };
+
+function getAttachmentTypeCategory(name) {
+  if (!name || typeof name !== "string") return "Outros";
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  const isVideo = /^(mp4|webm|mov|avi|mkv|m4v)$/.test(ext) || (name && /video/i.test(name));
+  const isAudio = /^(mp3|wav|ogg|m4a|aac|wma)$/.test(ext) || (name && /audio/i.test(name));
+  if (isVideo) return "Vídeos";
+  if (isAudio) return "Áudios";
+  if (["jpg", "jpeg"].includes(ext)) return "JPG";
+  if (ext === "png") return "PNG";
+  if (["cdr", "eps"].includes(ext)) return "CDR";
+  if (ext === "psd") return "PSD";
+  if (ext === "pdf") return "PDF";
+  return "Outros";
+}
+
+function groupAttachmentsByType(attachments) {
+  const byType = {};
+  attachments.forEach((att) => {
+    const cat = getAttachmentTypeCategory(att.name);
+    if (!byType[cat]) byType[cat] = [];
+    byType[cat].push(att);
+  });
+  return ATTACHMENT_TYPE_ORDER.filter((cat) => byType[cat]?.length).map((cat) => ({ category: cat, items: byType[cat] }));
+}
+
+const LS_ATTACHMENT_GROUPS = "quadro_attachment_groups";
+const LS_ATTACHMENT_GROUP_ASSIGN = "quadro_attachment_group_assign";
+
+export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true, onOpenShare, onOpenMove }) {
   const classes = useStyles();
   useContext(AuthContext);
   const editorRef = useRef(null);
@@ -339,6 +445,17 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
   const [loadingContact, setLoadingContact] = useState(false);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [statusOptions, setStatusOptions] = useState(DEFAULT_STATUSES);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [renameAttId, setRenameAttId] = useState(null);
+  const [renameAttValue, setRenameAttValue] = useState("");
+  const [attachmentsViewMode, setAttachmentsViewMode] = useState("byType");
+  const [attachmentGroups, setAttachmentGroups] = useState([]);
+  const [attachmentGroupAssign, setAttachmentGroupAssign] = useState({});
+  const [expandedTypeCategories, setExpandedTypeCategories] = useState(() => new Set(ATTACHMENT_TYPE_ORDER));
+  const [expandedCustomGroupIds, setExpandedCustomGroupIds] = useState(new Set());
+  const [newGroupName, setNewGroupName] = useState("");
+  const [showNewGroupInput, setShowNewGroupInput] = useState(false);
   const [statusManagerOpen, setStatusManagerOpen] = useState(false);
   const [newStatusLabel, setNewStatusLabel] = useState("");
   const [newStatusColor, setNewStatusColor] = useState("#1976d2");
@@ -730,6 +847,11 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
       const deleted = attachments.find((a) => a.id === id);
       const remaining = attachments.filter((a) => a.id !== id);
       setAttachments(remaining);
+      setAttachmentGroupAssign((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       if (deleted?.isCapa) {
         const next = remaining[0];
         setCoverImage(next?.url ? resolveImageUrl(next.url) : resolveImageUrl(ticket.contact?.urlPicture || ticket.contact?.profilePicUrl));
@@ -738,6 +860,117 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
     } catch (err) {
       toast.error(err?.response?.data?.message || "Erro ao excluir.");
     }
+  };
+
+  const openLightbox = (index) => {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  };
+  const closeLightbox = () => setLightboxOpen(false);
+  const lightboxPrev = () => setLightboxIndex((i) => (i <= 0 ? attachments.length - 1 : i - 1));
+  const lightboxNext = () => setLightboxIndex((i) => (i >= attachments.length - 1 ? 0 : i + 1));
+
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") closeLightbox();
+      if (e.key === "ArrowLeft") lightboxPrev();
+      if (e.key === "ArrowRight") lightboxNext();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxOpen, attachments.length]);
+
+  const handleRenameAttachment = async () => {
+    if (renameAttId == null || !ticket?.id) return;
+    const trimmed = (renameAttValue || "").trim();
+    if (!trimmed) {
+      setRenameAttId(null);
+      return;
+    }
+    try {
+      await api.put("/tickets/" + ticket.id + "/quadro/attachments/" + renameAttId + "/rename", { name: trimmed });
+      setAttachments((prev) => prev.map((a) => (a.id === renameAttId ? { ...a, name: trimmed } : a)));
+      toast.success("Anexo renomeado.");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Renomear não disponível no servidor.");
+    }
+    setRenameAttId(null);
+    setRenameAttValue("");
+  };
+
+  const loadAttachmentGroupsFromStorage = () => {
+    if (!ticket?.id) return;
+    try {
+      const rawGroups = localStorage.getItem(LS_ATTACHMENT_GROUPS);
+      const rawAssign = localStorage.getItem(LS_ATTACHMENT_GROUP_ASSIGN);
+      const allGroups = rawGroups ? JSON.parse(rawGroups) : {};
+      const allAssign = rawAssign ? JSON.parse(rawAssign) : {};
+      const tid = String(ticket.id);
+      setAttachmentGroups(Array.isArray(allGroups[tid]) ? allGroups[tid] : []);
+      setAttachmentGroupAssign(typeof allAssign[tid] === "object" && allAssign[tid] !== null ? allAssign[tid] : {});
+    } catch (e) {
+      setAttachmentGroups([]);
+      setAttachmentGroupAssign({});
+    }
+  };
+
+  useEffect(() => {
+    if (ticket?.id) loadAttachmentGroupsFromStorage();
+  }, [ticket?.id]);
+
+  const saveAttachmentGroupsToStorage = (groups, assign) => {
+    if (!ticket?.id) return;
+    try {
+      const rawGroups = localStorage.getItem(LS_ATTACHMENT_GROUPS);
+      const rawAssign = localStorage.getItem(LS_ATTACHMENT_GROUP_ASSIGN);
+      const allGroups = rawGroups ? JSON.parse(rawGroups) : {};
+      const allAssign = rawAssign ? JSON.parse(rawAssign) : {};
+      const tid = String(ticket.id);
+      allGroups[tid] = groups;
+      allAssign[tid] = assign;
+      localStorage.setItem(LS_ATTACHMENT_GROUPS, JSON.stringify(allGroups));
+      localStorage.setItem(LS_ATTACHMENT_GROUP_ASSIGN, JSON.stringify(allAssign));
+    } catch (e) {}
+  };
+
+  const createAttachmentGroup = () => {
+    const name = (newGroupName || "").trim();
+    if (!name) return;
+    const newGroup = { id: "g_" + Date.now(), name };
+    setAttachmentGroups((prev) => {
+      const next = [...prev, newGroup];
+      saveAttachmentGroupsToStorage(next, attachmentGroupAssign);
+      return next;
+    });
+    setNewGroupName("");
+    setShowNewGroupInput(false);
+    setExpandedCustomGroupIds((prev) => new Set([...prev, newGroup.id]));
+    toast.success('Grupo "' + name + '" criado.');
+  };
+
+  const assignAttachmentToGroup = (attachmentId, groupId) => {
+    const next = groupId ? { ...attachmentGroupAssign, [attachmentId]: groupId } : (() => { const o = { ...attachmentGroupAssign }; delete o[attachmentId]; return o; })();
+    setAttachmentGroupAssign(next);
+    saveAttachmentGroupsToStorage(attachmentGroups, next);
+  };
+
+  const toggleTypeCategory = (cat) => {
+    setExpandedTypeCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
+
+  const toggleCustomGroup = (groupId) => {
+    setExpandedCustomGroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
   };
 
   const handleSaveValores = async () => {
@@ -954,8 +1187,15 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
             {refreshing ? "Atualizando…" : "Atualizar"}
           </Button>
         )}
+        {onOpenMove && ticket && (
+          <Tooltip title="Mover para outra área, etapa ou atendente (sai do quadro atual)">
+            <Button size="small" startIcon={<SwapHoriz />} onClick={() => onOpenMove(ticket)} style={{ marginRight: 8 }}>
+              Mover
+            </Button>
+          </Tooltip>
+        )}
         {onOpenShare && ticket && (
-          <Tooltip title="Compartilhar com outras áreas (Financeiro, Designer, etc.)">
+          <Tooltip title="Compartilhar com outras áreas (vinculado ou desvinculado)">
             <Button size="small" startIcon={<Share />} onClick={() => onOpenShare(ticket)} style={{ marginRight: 8 }}>
               Compartilhar
             </Button>
@@ -1475,42 +1715,203 @@ export default function QuadroModal({ open, onClose, ticketUuid, readOnly = true
             </Paper>
 
             <Paper elevation={0} className={classes.attachmentsSection}>
-              <Typography variant="subtitle1" style={{ fontWeight: 600, marginBottom: 12 }}>Anexos</Typography>
-              {attachments.map((att) => (
-                <div key={att.id} className={classes.attachmentItem}>
-                  <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }}>
-                    <AttachFile fontSize="small" style={{ marginRight: 8, color: "#666" }} />
-                    {att.url ? (
-                      <Typography noWrap component="a" href={resolveImageUrl(att.url)} target="_blank" rel="noopener noreferrer" style={{ flex: 1, color: "inherit", textDecoration: "none" }}>
-                        {att.name}
-                      </Typography>
-                    ) : (
-                      <Typography noWrap style={{ flex: 1 }}>{att.name}</Typography>
-                    )}
-                    {att.isCapa && <span className={classes.attachmentCapa}>Capa</span>}
-                  </div>
-                  <Typography variant="caption" color="textSecondary" style={{ marginRight: 8 }}>{att.date}</Typography>
-                  {!readOnly && !att.isCapa && (
-                    <Button size="small" onClick={() => setAsCapa(att.id)}>Marcar como Capa</Button>
-                  )}
-                  {!readOnly && (
-                    <Tooltip title="Excluir anexo">
-                      <IconButton size="small" onClick={() => handleDeleteAttachment(att.id)} color="secondary">
-                        <Delete fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                <Typography variant="subtitle1" style={{ fontWeight: 600 }}>Anexos</Typography>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Tooltip title="Agrupar por tipo (JPG, PNG, PDF, etc.)">
+                    <Button size="small" variant={attachmentsViewMode === "byType" ? "contained" : "outlined"} color="primary" startIcon={<ViewModule />} onClick={() => setAttachmentsViewMode("byType")}>
+                      Por tipo
+                    </Button>
+                  </Tooltip>
+                  <Tooltip title="Agrupar por grupos personalizados">
+                    <Button size="small" variant={attachmentsViewMode === "byGroup" ? "contained" : "outlined"} color="primary" startIcon={<Folder />} onClick={() => setAttachmentsViewMode("byGroup")}>
+                      Por grupos
+                    </Button>
+                  </Tooltip>
                 </div>
-              ))}
+              </div>
+
+              {attachments.length === 0 ? (
+                <Typography variant="body2" color="textSecondary">Nenhum anexo.</Typography>
+              ) : attachmentsViewMode === "byType" ? (
+                groupAttachmentsByType(attachments).map(({ category, items }) => (
+                  <div key={category}>
+                    <div className={classes.attachmentCategoryHeader} onClick={() => toggleTypeCategory(category)}>
+                      <Typography variant="subtitle2" style={{ fontWeight: 600 }}>{ATTACHMENT_TYPE_LABELS[category] || category} ({items.length})</Typography>
+                      {expandedTypeCategories.has(category) ? <ExpandLess /> : <ExpandMore />}
+                    </div>
+                    {expandedTypeCategories.has(category) && (
+                      <div style={{ paddingLeft: 8 }}>
+                        {items.map((att) => {
+                          const idx = attachments.findIndex((a) => a.id === att.id);
+                          return (
+                            <div key={att.id} className={`${classes.attachmentItem} ${classes.attachmentItemClickable}`} onClick={() => openLightbox(idx)}>
+                              <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                                <AttachFile fontSize="small" style={{ marginRight: 8, color: "#666" }} />
+                                <Typography noWrap style={{ flex: 1 }}>{att.name}</Typography>
+                                {att.isCapa && <span className={classes.attachmentCapa}>Capa</span>}
+                              </div>
+                              <Typography variant="caption" color="textSecondary" style={{ marginRight: 8 }}>{att.date}</Typography>
+                              {!readOnly && (
+                                <>
+                                  {!att.isCapa && <Button size="small" onClick={(e) => { e.stopPropagation(); setAsCapa(att.id); }}>Capa</Button>}
+                                  <Tooltip title="Renomear"><IconButton size="small" onClick={(e) => { e.stopPropagation(); setRenameAttId(att.id); setRenameAttValue(att.name); }}><Create fontSize="small" /></IconButton></Tooltip>
+                                  <Tooltip title="Excluir"><IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteAttachment(att.id); }} color="secondary"><Delete fontSize="small" /></IconButton></Tooltip>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <>
+                  {attachmentGroups.map((grp) => {
+                    const groupAtts = attachments.filter((a) => attachmentGroupAssign[a.id] === grp.id);
+                    const expanded = expandedCustomGroupIds.has(grp.id);
+                    return (
+                      <div key={grp.id}>
+                        <div className={classes.attachmentGroupHeader} onClick={() => toggleCustomGroup(grp.id)}>
+                          <Typography variant="subtitle2" style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                            <Folder fontSize="small" /> {grp.name} ({groupAtts.length})
+                          </Typography>
+                          {expanded ? <ExpandLess /> : <ExpandMore />}
+                        </div>
+                        {expanded && (
+                          <div style={{ paddingLeft: 8 }}>
+                            {groupAtts.length === 0 ? (
+                              <Typography variant="caption" color="textSecondary" style={{ display: "block", padding: 8 }}>Nenhum anexo neste grupo. Atribua na lista &quot;Sem grupo&quot;.</Typography>
+                            ) : groupAtts.map((att) => {
+                              const idx = attachments.findIndex((a) => a.id === att.id);
+                              return (
+                                <div key={att.id} className={`${classes.attachmentItem} ${classes.attachmentItemClickable}`} onClick={() => openLightbox(idx)}>
+                                  <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                                    <AttachFile fontSize="small" style={{ marginRight: 8, color: "#666" }} />
+                                    <Typography noWrap style={{ flex: 1 }}>{att.name}</Typography>
+                                    {att.isCapa && <span className={classes.attachmentCapa}>Capa</span>}
+                                  </div>
+                                  <Typography variant="caption" color="textSecondary" style={{ marginRight: 8 }}>{att.date}</Typography>
+                                  {!readOnly && (
+                                    <>
+                                      {!att.isCapa && <Button size="small" onClick={(e) => { e.stopPropagation(); setAsCapa(att.id); }}>Capa</Button>}
+                                      <Tooltip title="Remover do grupo"><Button size="small" onClick={(e) => { e.stopPropagation(); assignAttachmentToGroup(att.id, null); }}>Sair do grupo</Button></Tooltip>
+                                      <Tooltip title="Renomear"><IconButton size="small" onClick={(e) => { e.stopPropagation(); setRenameAttId(att.id); setRenameAttValue(att.name); }}><Create fontSize="small" /></IconButton></Tooltip>
+                                      <Tooltip title="Excluir"><IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteAttachment(att.id); }} color="secondary"><Delete fontSize="small" /></IconButton></Tooltip>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <Typography variant="subtitle2" color="textSecondary" style={{ marginTop: 12 }}>Sem grupo</Typography>
+                  {attachments.filter((a) => !attachmentGroupAssign[a.id]).map((att) => {
+                    const idx = attachments.findIndex((x) => x.id === att.id);
+                    return (
+                      <div key={att.id} className={`${classes.attachmentItem} ${classes.attachmentItemClickable}`} onClick={() => openLightbox(idx)}>
+                        <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                          <AttachFile fontSize="small" style={{ marginRight: 8, color: "#666" }} />
+                          <Typography noWrap style={{ flex: 1 }}>{att.name}</Typography>
+                          {att.isCapa && <span className={classes.attachmentCapa}>Capa</span>}
+                        </div>
+                        <Typography variant="caption" color="textSecondary" style={{ marginRight: 8 }}>{att.date}</Typography>
+                        {!readOnly && (
+                          <>
+                            <FormControl size="small" style={{ minWidth: 160 }} onClick={(e) => e.stopPropagation()}>
+                              <InputLabel>Mover para grupo</InputLabel>
+                              <Select value={attachmentGroupAssign[att.id] || ""} onChange={(e) => assignAttachmentToGroup(att.id, e.target.value || null)} label="Mover para grupo">
+                                <MenuItem value="">—</MenuItem>
+                                {attachmentGroups.map((g) => (
+                                  <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                            {!att.isCapa && <Button size="small" onClick={(e) => { e.stopPropagation(); setAsCapa(att.id); }}>Capa</Button>}
+                            <Tooltip title="Renomear"><IconButton size="small" onClick={(e) => { e.stopPropagation(); setRenameAttId(att.id); setRenameAttValue(att.name); }}><Create fontSize="small" /></IconButton></Tooltip>
+                            <Tooltip title="Excluir"><IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteAttachment(att.id); }} color="secondary"><Delete fontSize="small" /></IconButton></Tooltip>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {!readOnly && (
+                    <div style={{ marginTop: 12 }}>
+                      {showNewGroupInput ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <TextField size="small" label="Nome do grupo" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && createAttachmentGroup()} style={{ minWidth: 220 }} />
+                          <Button size="small" variant="contained" color="primary" startIcon={<CreateNewFolder />} onClick={createAttachmentGroup} disabled={!newGroupName.trim()}>Criar</Button>
+                          <Button size="small" onClick={() => { setShowNewGroupInput(false); setNewGroupName(""); }}>Cancelar</Button>
+                        </div>
+                      ) : (
+                        <Button size="small" variant="outlined" startIcon={<CreateNewFolder />} onClick={() => setShowNewGroupInput(true)}>Criar grupo com nome personalizado</Button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
               {!readOnly && (
                 <>
-                  <input type="file" ref={fileInputRef} multiple className={classes.inputFile} onChange={handleAddAttachment} accept="image/*,.pdf,.doc,.docx,.cdr,.eps,audio/*" />
+                  <input type="file" ref={fileInputRef} multiple className={classes.inputFile} onChange={handleAddAttachment} accept="image/*,.pdf,.doc,.docx,.cdr,.eps,audio/*,video/*" />
                   <Button variant="outlined" size="small" startIcon={<Add />} className={classes.addAttachmentBtn} onClick={() => fileInputRef.current?.click()}>
-                    Adicionar (imagens, documentos, áudio)
+                    Adicionar (imagens, documentos, áudio, vídeo)
                   </Button>
                 </>
               )}
             </Paper>
+
+            {/* Lightbox: visualização ampliada com navegação */}
+            {lightboxOpen && attachments[lightboxIndex] && (
+              <div className={classes.lightboxBackdrop} onClick={closeLightbox} role="presentation">
+                <IconButton className={classes.lightboxCloseBtn} onClick={closeLightbox} size="medium" aria-label="Fechar">
+                  <Close style={{ fontSize: 32 }} />
+                </IconButton>
+                <IconButton className={classes.lightboxNav} style={{ left: 16 }} onClick={(e) => { e.stopPropagation(); lightboxPrev(); }} size="medium" aria-label="Anterior">
+                  <ArrowBack style={{ fontSize: 40 }} />
+                </IconButton>
+                <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: "90vw", maxHeight: "85vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {(() => {
+                    const att = attachments[lightboxIndex];
+                    const url = resolveImageUrl(att.url);
+                    const ext = (att.name || "").split(".").pop()?.toLowerCase();
+                    const isImage = /^(jpg|jpeg|png|gif|webp|bmp)$/.test(ext);
+                    const isVideo = /^(mp4|webm|mov|avi|mkv|m4v)$/.test(ext);
+                    if (isImage) return <img src={url} alt={att.name} className={classes.lightboxContent} onClick={(e) => e.stopPropagation()} />;
+                    if (isVideo) return <video src={url} controls className={classes.lightboxContent} onClick={(e) => e.stopPropagation()} />;
+                    return (
+                      <Typography className={classes.lightboxCaption}>
+                        <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "#90caf9", textDecoration: "underline" }} onClick={(e) => e.stopPropagation()}>
+                          Abrir arquivo: {att.name}
+                        </a>
+                      </Typography>
+                    );
+                  })()}
+                </div>
+                <IconButton className={classes.lightboxNav} style={{ right: 16 }} onClick={(e) => { e.stopPropagation(); lightboxNext(); }} size="medium" aria-label="Próximo">
+                  <ArrowForward style={{ fontSize: 40 }} />
+                </IconButton>
+                <Typography className={classes.lightboxCaption}>
+                  {attachments[lightboxIndex].name} ({lightboxIndex + 1} / {attachments.length})
+                </Typography>
+              </div>
+            )}
+
+            {/* Dialog Renomear anexo */}
+            <Dialog open={renameAttId != null} onClose={() => { setRenameAttId(null); setRenameAttValue(""); }} maxWidth="xs" fullWidth>
+              <DialogTitle>Renomear anexo</DialogTitle>
+              <DialogContent>
+                <TextField fullWidth label="Nome do arquivo" value={renameAttValue} onChange={(e) => setRenameAttValue(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleRenameAttachment()} />
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => { setRenameAttId(null); setRenameAttValue(""); }}>Cancelar</Button>
+                <Button onClick={handleRenameAttachment} color="primary" variant="contained">Salvar</Button>
+              </DialogActions>
+            </Dialog>
 
             <Paper elevation={0} className={classes.logsSection}>
               <div

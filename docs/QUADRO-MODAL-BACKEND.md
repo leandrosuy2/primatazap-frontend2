@@ -270,6 +270,25 @@ O front chama com **ticketId** (número). Remover registro e, se quiser, arquivo
 
 ---
 
+### 4.6.1 PUT `/tickets/:ticketId/quadro/attachments/:attachmentId/rename` (opcional)
+
+Usado pelo front para **renomear** um anexo (nome de exibição/arquivo).
+
+**Body**
+
+```json
+{
+  "name": "novo-nome-do-arquivo.pdf"
+}
+```
+
+- Atualizar o campo `name` do anexo (QuadroAnexo ou equivalente) para o valor enviado.
+- Validar que o anexo pertence ao ticket e à company.
+
+**Response 200** (objeto attachment atualizado) ou 204.
+
+---
+
 ### 4.7 PUT `/tickets/:ticketId/quadro` (valores)
 
 Usado pelo front para salvar **Valor do Serviço** e **Valor de Entrada** (saldo restante é calculado no front: valorServico − valorEntrada).

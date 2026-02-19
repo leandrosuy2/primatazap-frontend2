@@ -141,11 +141,7 @@ const TicketsCustom = () => {
 					</div>
 					<div className={classes.messagesWrapper}>
 						{ticketId ? (
-							<>
-								{/* <Suspense fallback={<CircularProgress />}> */}
-								<Ticket />
-								{/* </Suspense> */}
-							</>
+							<Ticket />
 						) : (
 							<Hidden only={["sm", "xs"]}>
 								<Paper square variant="outlined" className={classes.welcomeMsg}>

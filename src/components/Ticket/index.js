@@ -11,6 +11,7 @@ import TicketHeader from "../TicketHeader";
 import TicketInfo from "../TicketInfo";
 import TicketActionButtons from "../TicketActionButtonsCustom";
 import MessagesList from "../MessagesList";
+import TicketFloatingActions from "../TicketFloatingActions";
 import api from "../../services/api";
 import { ReplyMessageProvider } from "../../context/ReplyingMessage/ReplyingMessageContext";
 import { ForwardMessageProvider } from "../../context/ForwarMessage/ForwardMessageContext";
@@ -38,6 +39,7 @@ const useStyles = makeStyles((theme) => ({
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
+    position: "relative",
     borderTopLeftRadius: 0,
     borderBottomLeftRadius: 0,
     borderLeft: "0",
@@ -56,6 +58,13 @@ const useStyles = makeStyles((theme) => ({
       duration: theme.transitions.duration.enteringScreen,
     }),
     marginRight: 0,
+  },
+  contentWithFloating: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    minWidth: 0,
+    overflow: "hidden",
   },
 }));
 
@@ -194,32 +203,33 @@ const Ticket = () => {
           [classes.mainWrapperShift]: drawerOpen,
         })}
       >
-        {/* <div id="TicketHeader"> */}
-        <TicketHeader loading={loading}>
-          {ticket.contact !== undefined && (
-            <div id="TicketHeader">
-              <TicketInfo
-                contact={contact}
-                ticket={ticket}
-                onClick={handleDrawerOpen}
-              />
-            </div>
-          )}
-          <TicketActionButtons
-            ticket={ticket}
-          />
-        </TicketHeader>
-        {/* </div> */}
-        <Paper>
-          <TagsContainer contact={contact} />
-        </Paper>
-        <ReplyMessageProvider>
-          <ForwardMessageProvider>
-            <EditMessageProvider>
-              {renderMessagesList()}
-            </EditMessageProvider>
-          </ForwardMessageProvider>
-        </ReplyMessageProvider>
+        {ticketId && ticketId !== "undefined" && <TicketFloatingActions ticketId={ticketId} />}
+        <div className={classes.contentWithFloating}>
+          <TicketHeader loading={loading}>
+            {ticket.contact !== undefined && (
+              <div id="TicketHeader">
+                <TicketInfo
+                  contact={contact}
+                  ticket={ticket}
+                  onClick={handleDrawerOpen}
+                />
+              </div>
+            )}
+            <TicketActionButtons
+              ticket={ticket}
+            />
+          </TicketHeader>
+          <Paper>
+            <TagsContainer contact={contact} />
+          </Paper>
+          <ReplyMessageProvider>
+            <ForwardMessageProvider>
+              <EditMessageProvider>
+                {renderMessagesList()}
+              </EditMessageProvider>
+            </ForwardMessageProvider>
+          </ReplyMessageProvider>
+        </div>
       </Paper>
 
       <ContactDrawer
